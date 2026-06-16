@@ -31,6 +31,7 @@
         }
         .step-box {
             margin-bottom: 22px;
+            display: none;
         }
         .step-title {
             font-size: 16px;
@@ -120,6 +121,7 @@
             text-align: center;
             color: #666;
             padding: 20px;
+            font-size: 18px;
         }
     </style>
 </head>
@@ -129,7 +131,7 @@
         <div class="loading" id="loadingTip">正在加载云端共享数据...</div>
 
         <!-- 第一步：抽取负责人 -->
-        <div class="step-box" id="stepPerson" style="display:none">
+        <div class="step-box" id="stepPerson">
             <div class="step-title">第一步：今日选餐负责人（仅过滤昨天的人，不会连续重复）</div>
             <div class="result-card">
                 <div id="personShow">等待云端数据加载</div>
@@ -138,14 +140,13 @@
         </div>
 
         <!-- 第二步：抽取午餐店铺 -->
-        <div class="step-box" id="stepShop" style="display:none">
+        <div class="step-box" id="stepShop">
             <div class="step-title">第二步：由选中负责人抽取午餐（近7天不重复店铺）</div>
             <div class="result-card">
                 <div id="shopShow">先抽取负责人，再点选店按钮</div>
             </div>
             <div class="btn-group">
                 <button id="pickShopBtn" disabled>抽取午餐店铺</button>
-                <!-- 已移除清空记录按钮，无法删除数据 -->
             </div>
         </div>
 
@@ -164,10 +165,10 @@
     </div>
 
     <script>
-        // ===================== 请修改这里的配置 =====================
+        // ===================== 【必须修改】填入你的JSONBin信息 =====================
         const JSONBIN_API_KEY = "$2a$10$ibmL3c3w59DTNibRi5NC2uuth8/Wre0Pj76fh8/SbcMN09YV3Peiq";
-        const JSONBIN_ID = "6a30dd3df5f4af5e29f93ba5";
-        // ==========================================================
+        const JSONBIN_ID = "6a30dfeef5f4af5e29f944f3";
+        // =========================================================================
 
         // 选人名单
         const personList = ["陈鹏", "晨曦", "淑静", "王辰"];
@@ -208,64 +209,100 @@
 
         let selectedPerson = "";
         let globalRecord = {};
+        let isRequesting = false; // 防并发重复请求锁
+        let refreshTimer = null;
 
-        // 获取今日日期字符串 YYYY-MM-DD
+        // 获取今日日期 YYYY-MM-DD
         function getTodayStr() {
             const d = new Date();
             return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
         }
-
-        // 获取昨日日期字符串
+        // 获取昨日日期
         function getYesterdayStr() {
             const d = new Date();
             const yesterday = new Date(d.getTime() - 24 * 3600 * 1000);
             return `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,'0')}-${String(yesterday.getDate()).padStart(2,'0')}`;
         }
 
-        // 从云端读取共享记录
+        // 【修复1：带10秒超时、错误捕获的云端读取函数】
         async function fetchCloudRecord() {
-            const res = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_ID}`, {
-                headers: {
-                    "X-Master-Key": JSONBIN_API_KEY
+            if(isRequesting) return; // 正在请求则直接返回，防止堆积
+            isRequesting = true;
+            const controller = new AbortController();
+            // 10秒超时，国内网络慢适配
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+            try {
+                const res = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_ID}`, {
+                    headers: {
+                        "X-Master-Key": JSONBIN_API_KEY
+                    },
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                if(!res.ok) throw new Error(`接口请求失败，状态码：${res.status}`);
+                const data = await res.json();
+                // 校验Bin数据格式，格式错误直接初始化空记录
+                if(!data.record || typeof data.record !== "object") {
+                    globalRecord = {};
+                } else {
+                    globalRecord = data.record;
                 }
-            });
-            const data = await res.json();
-            globalRecord = data.record || {};
-            renderPage();
+                renderPage();
+            } catch (err) {
+                clearTimeout(timeoutId);
+                // 错误弹窗提示，不再卡死加载
+                if(err.name === "AbortError") {
+                    alert("加载超时：国内网络访问JSONBin较慢，请多刷新页面，或检查网络");
+                } else {
+                    alert(`云端数据加载失败：${err.message}\n请检查密钥、BinID是否填写正确，Bin初始内容是否为{"record": {}}`);
+                }
+            } finally {
+                isRequesting = false;
+            }
         }
 
-        // 保存记录到云端公共库
+        // 保存数据到云端
         async function saveCloudRecord() {
-            await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_ID}`, {
-                method: "PUT",
-                headers: {
-                    "X-Master-Key": JSONBIN_API_KEY,
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({ record: globalRecord })
-            });
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+            try {
+                const res = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_ID}`, {
+                    method: "PUT",
+                    headers: {
+                        "X-Master-Key": JSONBIN_API_KEY,
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ record: globalRecord }),
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                if(!res.ok) throw new Error(`保存失败，状态码${res.status}`);
+                await fetchCloudRecord(); // 保存后刷新最新数据
+            } catch (err) {
+                clearTimeout(timeoutId);
+                alert(`保存今日抽签结果失败：${err.message}`);
+            }
         }
 
-        // 渲染页面状态
+        // 渲染页面主体
         function renderPage() {
             loadingTip.style.display = "none";
             stepPerson.style.display = "block";
             stepShop.style.display = "block";
             const today = getTodayStr();
-            // 今日已有全局结果，锁定全部按钮
             if (globalRecord[today]) {
                 const todayData = globalRecord[today];
                 selectedPerson = todayData.person;
                 personShow.innerText = `🎯 今日选餐负责人：${selectedPerson}`;
                 shopShow.innerText = `✅ 今日午餐：${todayData.shop}`;
                 pickPersonBtn.disabled = true;
-                pickShopBtn.disabled = true;
                 pickPersonBtn.innerText = "今日已完成抽签，不可重复操作";
+                pickShopBtn.disabled = true;
             }
             renderLog();
         }
 
-        // 渲染历史记录列表
+        // 渲染历史记录
         function renderLog() {
             logBox.innerHTML = '';
             const dateArr = Object.keys(globalRecord).sort().reverse();
@@ -282,13 +319,12 @@
             })
         }
 
-        // 获取昨天的负责人，仅过滤昨日，不限制7天
+        // 获取昨日负责人，方案2选人过滤逻辑
         function getYesterdayPerson() {
             const yestDay = getYesterdayStr();
             return globalRecord[yestDay] ? globalRecord[yestDay].person : null;
         }
-
-        // 获取近7天吃过的店，过滤不重复选店
+        // 过滤近7天吃过的店铺
         function getRecentEatShop() {
             const today = new Date();
             const eatShopSet = new Set();
@@ -300,7 +336,7 @@
             return Array.from(eatShopSet);
         }
 
-        // 抽取负责人动画（方案2：仅过滤昨天的人）
+        // 抽取负责人动画
         async function runPersonAnimate() {
             const today = getTodayStr();
             if (globalRecord[today]) return;
@@ -315,9 +351,7 @@
                     clearInterval(timer);
                     const yestP = getYesterdayPerson();
                     let canPick = personList;
-                    if(yestP) {
-                        canPick = personList.filter(p => p !== yestP);
-                    }
+                    if(yestP) canPick = personList.filter(p => p !== yestP);
                     selectedPerson = canPick[Math.floor(Math.random() * canPick.length)];
                     personShow.innerText = `🎯 今日选餐负责人：${selectedPerson}`;
                     pickShopBtn.disabled = false;
@@ -325,7 +359,7 @@
             }, 80);
         }
 
-        // 抽取店铺动画，生成全局永久记录
+        // 抽取店铺并永久保存云端
         async function runShopAnimate() {
             if(!selectedPerson) return;
             const today = getTodayStr();
@@ -343,15 +377,11 @@
                     if(canChoose.length === 0) canChoose = allShopList;
                     const finalShop = canChoose[Math.floor(Math.random() * canChoose.length)];
                     shopShow.innerText = `✅ 今日午餐：${finalShop}`;
-                    // 写入全局云端记录，永久锁定
-                    globalRecord[today] = {
-                        person: selectedPerson,
-                        shop: finalShop
-                    };
+                    globalRecord[today] = { person: selectedPerson, shop: finalShop };
                     await saveCloudRecord();
                     pickPersonBtn.disabled = true;
-                    pickShopBtn.disabled = true;
                     pickPersonBtn.innerText = "今日已完成抽签，不可重复操作";
+                    pickShopBtn.disabled = true;
                     renderLog();
                 }
             }, 70);
@@ -360,10 +390,15 @@
         pickPersonBtn.addEventListener('click', runPersonAnimate);
         pickShopBtn.addEventListener('click', runShopAnimate);
 
-        // 页面加载自动拉取云端同步数据
-        window.onload = fetchCloudRecord;
-        // 定时自动刷新同步，保证多人实时更新
-        setInterval(fetchCloudRecord, 10000);
+        // 页面首次加载
+        window.onload = async () => {
+            await fetchCloudRecord();
+            // 【修复2：清除旧定时器，新建安全轮询】
+            if(refreshTimer) clearInterval(refreshTimer);
+            refreshTimer = setInterval(() => {
+                fetchCloudRecord();
+            }, 15000); // 拉长到15秒，减少国内接口请求压力
+        }
     </script>
 </body>
 </html>
