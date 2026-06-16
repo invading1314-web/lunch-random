@@ -3,402 +3,689 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>共享午餐抽签｜云端同步防作弊</title>
+    <title>午餐审判庭 · 随机轮值</title>
     <style>
         * {
-            margin: 0;
-            padding: 0;
             box-sizing: border-box;
-            font-family: "Microsoft Yahei", system-ui, sans-serif;
+            user-select: none;
         }
         body {
-            background: #f0f4f8;
-            padding: 30px 15px;
+            background: linear-gradient(145deg, #1a1a1a 0%, #2d2a26 100%);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
         }
-        .wrap {
-            max-width: 520px;
-            margin: 0 auto;
-            background: #fff;
-            border-radius: 18px;
-            padding: 35px 25px;
-            box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+        .container {
+            max-width: 700px;
+            width: 100%;
+            background: #fffaf2;
+            border-radius: 56px;
+            box-shadow: 0 30px 45px -18px rgba(0, 0, 0, 0.6);
+            overflow: hidden;
         }
-        h1 {
+        .header {
+            background: linear-gradient(115deg, #d45a38, #a83617);
+            padding: 1.6rem 1.5rem 1.2rem;
             text-align: center;
-            color: #2d3748;
-            font-size: 24px;
-            margin-bottom: 24px;
+            color: white;
         }
-        .step-box {
-            margin-bottom: 22px;
-            display: none;
+        .header h1 {
+            margin: 0;
+            font-size: 1.9rem;
         }
-        .step-title {
-            font-size: 16px;
-            color: #475569;
-            margin-bottom: 10px;
+        .cruel-tip {
+            background: #2c1f17;
+            display: inline-block;
+            margin-top: 12px;
+            padding: 6px 18px;
+            border-radius: 60px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: #ffc7a4;
+        }
+        .lottery-area {
+            padding: 32px 20px 24px;
+            background: #fffbf5;
+        }
+        .sync-badge {
+            background: #ece1d4;
+            border-radius: 40px;
+            padding: 5px 14px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: #b25630;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        .online-dot {
+            width: 10px;
+            height: 10px;
+            background: #22c55e;
+            border-radius: 50%;
+            display: inline-block;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0%,
+            100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.4;
+            }
+        }
+        .today-picker-highlight {
+            background: #fef0e6;
+            border: 2px dashed #dd6b42;
+            border-radius: 16px;
+            padding: 10px 16px;
+            margin: 8px 0 12px;
+            text-align: center;
+            font-size: 1.1rem;
+        }
+        .today-picker-highlight strong {
+            color: #dd6b42;
+            font-size: 1.4rem;
+        }
+        .result-glass {
+            background: white;
+            border-radius: 48px;
+            box-shadow: 0 12px 28px rgba(0, 0, 0, 0.1);
+            padding: 24px 12px;
+            text-align: center;
+            margin: 8px 0 16px;
+        }
+        .result-label {
+            font-size: 0.85rem;
+            letter-spacing: 2px;
+            color: #be7652;
             font-weight: 600;
         }
-        .result-card {
-            border: 2px dashed #cbd5e0;
-            border-radius: 14px;
-            min-height: 90px;
+        .result-person {
+            font-size: 1.8rem;
+            font-weight: 700;
+            background: #fff0e6;
+            display: inline-block;
+            padding: 6px 28px;
+            border-radius: 60px;
+            margin: 10px 0 6px;
+            color: #bc4e2a;
+        }
+        .result-name {
+            font-size: 2.2rem;
+            font-weight: 800;
+            color: #2d241d;
+            margin: 12px 0 6px;
+        }
+        .btn {
+            border: none;
+            padding: 14px 32px;
+            border-radius: 60px;
+            font-weight: 700;
+            font-size: 1.1rem;
+            cursor: pointer;
+            width: 100%;
+            max-width: 280px;
+            transition: transform 0.1s;
+        }
+        .btn-primary {
+            background: #dd6b42;
+            color: white;
+            box-shadow: 0 8px 16px -8px #c2512d;
+        }
+        .btn-primary:active {
+            transform: scale(0.97);
+        }
+        .btn-primary:disabled {
+            background: #c2a088;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        .history-section {
+            background: #fff7ef;
+            padding: 16px 20px 24px;
+            border-top: 1px solid #f3e3d4;
+        }
+        .section-title {
+            font-weight: 700;
+            color: #61412e;
+            margin-bottom: 16px;
+            border-left: 5px solid #dd6b42;
+            padding-left: 14px;
             display: flex;
+            justify-content: space-between;
             align-items: center;
-            justify-content: center;
-            padding: 16px;
-            margin-bottom: 14px;
-        }
-        #personShow {
-            font-size: 26px;
-            font-weight: 700;
-            color: #2563eb;
-            text-align: center;
-        }
-        #shopShow {
-            font-size: 28px;
-            font-weight: 700;
-            color: #dc2626;
-            text-align: center;
-        }
-        .btn-group {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 22px;
             flex-wrap: wrap;
         }
-        button {
-            flex: 1;
-            min-width: 130px;
-            padding: 14px;
-            border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            cursor: pointer;
-            transition: opacity 0.2s;
-        }
-        button:active {
-            opacity: 0.85;
-        }
-        #pickPersonBtn {
-            background: #2563eb;
-            color: #fff;
-        }
-        #pickShopBtn {
-            background: #059669;
-            color: #fff;
-        }
-        .log-title {
-            font-size: 18px;
-            color: #374151;
-            margin-bottom: 12px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid #e5e7eb;
-        }
-        .log-list {
-            max-height: 200px;
+        .history-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            max-height: 280px;
             overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
         }
-        .log-item {
-            padding: 9px 0;
-            border-bottom: 1px solid #f3f4f6;
-            color: #4b5563;
+        .history-item {
+            background: white;
+            border-radius: 60px;
+            padding: 10px 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 1px solid #f0ddcc;
         }
-        .tip-text {
-            margin-top: 18px;
-            font-size: 13px;
-            color: #78716c;
-            line-height: 1.6;
+        .history-date {
+            background: #efe1d4;
+            padding: 4px 12px;
+            border-radius: 30px;
+            font-size: 0.7rem;
+            font-weight: 600;
         }
-        .forceTip {
-            margin-top: 22px;
+        .history-info {
+            flex: 1;
+            margin: 0 12px;
+        }
+        .live-tip {
+            background: #2c241e;
+            color: #fad6bc;
+            border-radius: 28px;
+            padding: 8px 16px;
+            font-size: 0.7rem;
             text-align: center;
-            font-size: 17px;
-            color: #dc2626;
-            font-weight: bold;
+            margin-top: 12px;
+        }
+        footer {
+            text-align: center;
+            font-size: 0.7rem;
+            color: #c2a07e;
+            background: #fff7ef;
+            padding: 12px 0 20px;
         }
         .loading {
-            text-align: center;
-            color: #666;
-            padding: 20px;
-            font-size: 18px;
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 0.6s linear infinite;
+        }
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+        .status-ok {
+            background: #e6f7e6;
+            color: #1a7a1a;
+            padding: 12px 16px;
+            border-radius: 12px;
+            margin: 10px 0;
+            font-size: 0.85rem;
+            border-left: 4px solid #1a7a1a;
+            text-align: left;
+        }
+        .status-error {
+            background: #fde8e8;
+            color: #b91c1c;
+            padding: 12px 16px;
+            border-radius: 12px;
+            margin: 10px 0;
+            font-size: 0.85rem;
+            border-left: 4px solid #b91c1c;
+            text-align: left;
+        }
+        .status-info {
+            background: #e8f0fe;
+            color: #1a5a7a;
+            padding: 12px 16px;
+            border-radius: 12px;
+            margin: 10px 0;
+            font-size: 0.85rem;
+            border-left: 4px solid #1a5a7a;
+            text-align: left;
+        }
+        @media (max-width: 500px) {
+            .result-name {
+                font-size: 1.7rem;
+            }
+            .result-person {
+                font-size: 1.3rem;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="wrap">
-        <h1>共享午餐抽签（云端同步·每日仅一次）</h1>
-        <div class="loading" id="loadingTip">正在加载云端共享数据...</div>
-
-        <!-- 第一步：抽取负责人 -->
-        <div class="step-box" id="stepPerson">
-            <div class="step-title">第一步：今日选餐负责人（仅过滤昨天的人，不会连续重复）</div>
-            <div class="result-card">
-                <div id="personShow">等待云端数据加载</div>
-            </div>
-            <button id="pickPersonBtn">抽取今日负责人</button>
+    <div class="container">
+        <div class="header">
+            <h1>⚖️ 午餐审判庭 🍜</h1>
+            <div class="cruel-tip">⚠️ 抽到不想吃的，含泪也要吃！ ⚠️</div>
         </div>
-
-        <!-- 第二步：抽取午餐店铺 -->
-        <div class="step-box" id="stepShop">
-            <div class="step-title">第二步：由选中负责人抽取午餐（近7天不重复店铺）</div>
-            <div class="result-card">
-                <div id="shopShow">先抽取负责人，再点选店按钮</div>
+        <div class="lottery-area">
+            <div class="sync-badge">
+                <span class="online-dot"></span> 🌐 云端同步 · 全员一致 🌐
             </div>
-            <div class="btn-group">
-                <button id="pickShopBtn" disabled>抽取午餐店铺</button>
+
+            <!-- 今日执剑人 -->
+            <div class="today-picker-highlight">
+                🎯 今日执剑人：<strong id="todayPickerName">加载中...</strong>
+            </div>
+
+            <div class="result-glass">
+                <div class="result-label">今日·命中午餐</div>
+                <div class="result-name" id="restaurantDisplay">🥘 等待抽选</div>
+                <div style="margin-top: 10px; font-size: 0.85rem; color: #a08068;">
+                    由 <strong id="pickerDisplay">—</strong> 执剑
+                </div>
+            </div>
+
+            <div style="display: flex; justify-content: center; gap: 12px; flex-wrap: wrap;">
+                <button class="btn btn-primary" id="drawBtn">🔮 今日 · 开饭抽签 🔮</button>
+            </div>
+            <div id="statusDisplay"></div>
+            <div class="live-tip">
+                💢 每天自动随机一位点餐官（7天内不重复） · 餐厅七天内不重样 · 每日仅可抽选一次<br>
+                ✅ 任何人抽选后，所有人实时同步看到结果
             </div>
         </div>
-
-        <div class="log-title">全局共享干饭记录（所有人统一）</div>
-        <div class="log-list" id="logBox"></div>
-
-        <div class="tip-text">
-            ✨ 全局规则：
-            1.选人规则：只会过滤前一天的负责人，保证不会连续两天同一个人，剩余3人随机抽取；
-            2.店铺规则：近7天吃过的餐厅不再抽取；
-            3.防作弊：全天全局仅能完整抽签1次，一旦生成结果，所有人无法重新抽取；
-            4.数据云端统一存储，所有人打开页面看到完全一致的记录；
-            5.无清空功能，历史记录永久保存不可删除。
+        <div class="history-section">
+            <div class="section-title">
+                📋 过往裁决录（不可清除）
+                <span style="font-size: 12px;">🏆 云端永久存储</span>
+            </div>
+            <div id="historyContainer">
+                <ul class="history-list" id="historyList">
+                    <div class="empty-history">🔄 同步数据中...</div>
+                </ul>
+            </div>
         </div>
-        <div class="forceTip">抽到不想吃的，含泪也要吃！</div>
+        <footer>🔒 数据存储于云端 · 每日自动随机点餐官（7天不重复） · 所有人完全同步</footer>
     </div>
 
     <script>
-        // ===================== 【必须修改】填入你的JSONBin信息 =====================
-        const JSONBIN_API_KEY = "$2a$10$ibmL3c3w59DTNibRi5NC2uuth8/Wre0Pj76fh8/SbcMN09YV3Peiq";
-        const JSONBIN_ID = "6a30dfeef5f4af5e29f944f3";
-        // =========================================================================
+        // ============================================================
+        // 🚨 请替换成你自己的 Supabase 配置！
+        // ============================================================
+       var SUPABASE_URL = "https://ejlqgnhimnnaavwylcvi.supabase.co"; // 👈 替换这里
+        var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVqbHFnbmhpbW5uYWF2d3lsY3ZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1ODIzODMsImV4cCI6MjA5NzE1ODM4M30.XEdLs2SXAXhmxUeTEcvbglZD-sKZ_gSploT1OFVPGC8"; // 👈 替换这里
+        // ============================================================
 
-        // 选人名单
-        const personList = ["陈鹏", "晨曦", "淑静", "王辰"];
-        // 全部午餐店铺
-        const allShopList = [
-            "漫柏沙县",
-            "妯娌",
-            "KFC",
-            "正记",
-            "忆面记",
-            "锦海鸡公煲",
-            "锦海陕西面馆",
-            "锦海锅贴",
-            "胖妹",
-            "漫柏猪脚饭",
-            "三江沙县",
-            "天福麻辣烫",
-            "漫柏烤肉饭",
-            "小湖兰州拉面",
-            "漫泊木桶饭",
-            "漫泊麻辣香锅",
-            "三江烩面",
-            "巫山纸包鱼",
-            "寻味江西",
-            "王家食堂",
-            "麦当劳",
-            "捡角"
+        if (SUPABASE_URL.indexOf("你的项目") !== -1 || SUPABASE_ANON_KEY.indexOf("你的anon") !== -1) {
+            document.getElementById("statusDisplay").innerHTML =
+                '<div class="status-error">⚠️ 请先配置 Supabase 密钥！<br><small>在代码开头替换 SUPABASE_URL 和 SUPABASE_ANON_KEY</small></div>';
+            document.getElementById("todayPickerName").innerText = "⚠️ 配置缺失";
+            throw new Error("请先配置 Supabase 密钥");
+        }
+
+        var FULL_RESTAURANT_LIST = [
+            "漫柏沙县", "妯娌", "KFC", "正记", "忆面记", "锦海鸡公煲", "锦海陕西面馆",
+            "锦海锅贴", "胖妹", "漫柏猪脚饭", "三江沙县", "天福麻辣烫", "漫柏烤肉饭",
+            "小湖兰州拉面", "漫泊木桶饭", "漫泊麻辣香锅", "三江烩面", "巫山纸包鱼",
+            "寻味江西", "王家食堂", "麦当劳", "捡角"
         ];
+        var PERSONS = ["陈鹏", "晨曦", "淑静", "王辰"];
+        var RECENT_DAYS_LIMIT = 7;
 
-        const personShow = document.getElementById('personShow');
-        const shopShow = document.getElementById('shopShow');
-        const pickPersonBtn = document.getElementById('pickPersonBtn');
-        const pickShopBtn = document.getElementById('pickShopBtn');
-        const logBox = document.getElementById('logBox');
-        const loadingTip = document.getElementById('loadingTip');
-        const stepPerson = document.getElementById('stepPerson');
-        const stepShop = document.getElementById('stepShop');
+        var supabaseClient = null;
+        var isDrawing = false;
+        var isInitialized = false;
 
-        let selectedPerson = "";
-        let globalRecord = {};
-        let isRequesting = false; // 防并发重复请求锁
-        let refreshTimer = null;
-
-        // 获取今日日期 YYYY-MM-DD
         function getTodayStr() {
-            const d = new Date();
-            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-        }
-        // 获取昨日日期
-        function getYesterdayStr() {
-            const d = new Date();
-            const yesterday = new Date(d.getTime() - 24 * 3600 * 1000);
-            return `${yesterday.getFullYear()}-${String(yesterday.getMonth()+1).padStart(2,'0')}-${String(yesterday.getDate()).padStart(2,'0')}`;
+            return new Date().toISOString().slice(0, 10);
         }
 
-        // 【修复1：带10秒超时、错误捕获的云端读取函数】
-        async function fetchCloudRecord() {
-            if(isRequesting) return; // 正在请求则直接返回，防止堆积
-            isRequesting = true;
-            const controller = new AbortController();
-            // 10秒超时，国内网络慢适配
-            const timeoutId = setTimeout(() => controller.abort(), 10000);
-            try {
-                const res = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_ID}`, {
-                    headers: {
-                        "X-Master-Key": JSONBIN_API_KEY
-                    },
-                    signal: controller.signal
-                });
-                clearTimeout(timeoutId);
-                if(!res.ok) throw new Error(`接口请求失败，状态码：${res.status}`);
-                const data = await res.json();
-                // 校验Bin数据格式，格式错误直接初始化空记录
-                if(!data.record || typeof data.record !== "object") {
-                    globalRecord = {};
-                } else {
-                    globalRecord = data.record;
+        function showStatus(message, type) {
+            type = type || 'info';
+            var el = document.getElementById("statusDisplay");
+            if (el) {
+                var className = type === 'error' ? 'status-error' : type === 'ok' ? 'status-ok' : 'status-info';
+                el.innerHTML = '<div class="' + className + '">' + message + '</div>';
+            }
+        }
+
+        // ============ 🔧 核心：随机选择执剑人（7天内不重复）============
+        function selectRandomPicker(historyRecords) {
+            var today = getTodayStr();
+
+            // 收集过去7天内当过执剑人的人
+            var limitDate = new Date();
+            limitDate.setDate(limitDate.getDate() - RECENT_DAYS_LIMIT);
+
+            var recentPickers = {};
+            for (var i = 0; i < historyRecords.length; i++) {
+                var rec = historyRecords[i];
+                var recDate = new Date(rec.date);
+                // 排除今天（今天还没抽）
+                if (recDate >= limitDate && rec.date !== today) {
+                    recentPickers[rec.picker] = true;
                 }
-                renderPage();
-            } catch (err) {
-                clearTimeout(timeoutId);
-                // 错误弹窗提示，不再卡死加载
-                if(err.name === "AbortError") {
-                    alert("加载超时：国内网络访问JSONBin较慢，请多刷新页面，或检查网络");
-                } else {
-                    alert(`云端数据加载失败：${err.message}\n请检查密钥、BinID是否填写正确，Bin初始内容是否为{"record": {}}`);
+            }
+
+            // 找出可用的人（过去7天没当过的）
+            var available = [];
+            for (var j = 0; j < PERSONS.length; j++) {
+                if (!recentPickers[PERSONS[j]]) {
+                    available.push(PERSONS[j]);
                 }
-            } finally {
-                isRequesting = false;
             }
+
+            // 如果所有人都当过（极端情况，比如只有4个人但7天内都轮过了），就全部放开
+            if (available.length === 0) {
+                available = PERSONS.slice();
+            }
+
+            // 随机选一个
+            var randomIndex = Math.floor(Math.random() * available.length);
+            return available[randomIndex];
         }
 
-        // 保存数据到云端
-        async function saveCloudRecord() {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000);
-            try {
-                const res = await fetch(`https://api.jsonbin.io/v3/b/${JSONBIN_ID}`, {
-                    method: "PUT",
-                    headers: {
-                        "X-Master-Key": JSONBIN_API_KEY,
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({ record: globalRecord }),
-                    signal: controller.signal
+        // ============ Supabase 操作 ============
+        function fetchAllRecords() {
+            return supabaseClient
+                .from('lunch_records')
+                .select('*')
+                .order('date', { ascending: true })
+                .then(function(result) {
+                    if (result.error) {
+                        console.error("获取记录失败:", result.error);
+                        return [];
+                    }
+                    return result.data || [];
                 });
-                clearTimeout(timeoutId);
-                if(!res.ok) throw new Error(`保存失败，状态码${res.status}`);
-                await fetchCloudRecord(); // 保存后刷新最新数据
-            } catch (err) {
-                clearTimeout(timeoutId);
-                alert(`保存今日抽签结果失败：${err.message}`);
-            }
         }
 
-        // 渲染页面主体
-        function renderPage() {
-            loadingTip.style.display = "none";
-            stepPerson.style.display = "block";
-            stepShop.style.display = "block";
-            const today = getTodayStr();
-            if (globalRecord[today]) {
-                const todayData = globalRecord[today];
-                selectedPerson = todayData.person;
-                personShow.innerText = `🎯 今日选餐负责人：${selectedPerson}`;
-                shopShow.innerText = `✅ 今日午餐：${todayData.shop}`;
-                pickPersonBtn.disabled = true;
-                pickPersonBtn.innerText = "今日已完成抽签，不可重复操作";
-                pickShopBtn.disabled = true;
-            }
-            renderLog();
+        function fetchTodayRecord() {
+            var today = getTodayStr();
+            return supabaseClient
+                .from('lunch_records')
+                .select('*')
+                .eq('date', today)
+                .maybeSingle()
+                .then(function(result) {
+                    if (result.error && result.error.code !== 'PGRST116') {
+                        console.error("查询今日记录失败:", result.error);
+                        return null;
+                    }
+                    return result.data;
+                });
         }
 
-        // 渲染历史记录
-        function renderLog() {
-            logBox.innerHTML = '';
-            const dateArr = Object.keys(globalRecord).sort().reverse();
-            if(dateArr.length === 0) {
-                logBox.innerHTML = '<div class="log-item">暂无全局干饭记录</div>';
+        function computeRestaurant(historyRecords) {
+            var today = getTodayStr();
+            var limitDate = new Date();
+            limitDate.setDate(limitDate.getDate() - RECENT_DAYS_LIMIT);
+
+            var blacklist = {};
+            for (var i = 0; i < historyRecords.length; i++) {
+                var rec = historyRecords[i];
+                var recDate = new Date(rec.date);
+                if (recDate >= limitDate && rec.date !== today) {
+                    blacklist[rec.restaurant] = true;
+                }
+            }
+
+            var available = [];
+            for (var j = 0; j < FULL_RESTAURANT_LIST.length; j++) {
+                var r = FULL_RESTAURANT_LIST[j];
+                if (!blacklist[r]) {
+                    available.push(r);
+                }
+            }
+            if (available.length === 0) {
+                available = FULL_RESTAURANT_LIST.slice();
+            }
+            var randomIndex = Math.floor(Math.random() * available.length);
+            return available[randomIndex];
+        }
+
+        function performDraw() {
+            if (isDrawing) {
+                return Promise.resolve({ success: false, message: "抽选中，请勿重复点击" });
+            }
+            isDrawing = true;
+
+            return fetchTodayRecord()
+                .then(function(existing) {
+                    if (existing) {
+                        isDrawing = false;
+                        return {
+                            success: false,
+                            alreadyExists: true,
+                            picker: existing.picker,
+                            restaurant: existing.restaurant
+                        };
+                    }
+                    return fetchAllRecords();
+                })
+                .then(function(allRecords) {
+                    if (allRecords.success !== undefined) {
+                        return allRecords;
+                    }
+
+                    // 🎯 随机选择执剑人（7天内不重复）
+                    var todayPicker = selectRandomPicker(allRecords);
+                    var restaurant = computeRestaurant(allRecords);
+
+                    return supabaseClient.from('lunch_records').insert([{
+                        date: getTodayStr(),
+                        picker: todayPicker,
+                        restaurant: restaurant
+                    }]).then(function(result) {
+                        if (result.error) {
+                            if (result.error.code === '23505') {
+                                return fetchTodayRecord().then(function(latest) {
+                                    isDrawing = false;
+                                    if (latest) {
+                                        return {
+                                            success: false,
+                                            alreadyExists: true,
+                                            picker: latest.picker,
+                                            restaurant: latest.restaurant
+                                        };
+                                    }
+                                    return { success: false, message: result.error.message };
+                                });
+                            }
+                            isDrawing = false;
+                            showStatus("❌ 插入失败: " + result.error.message, 'error');
+                            return { success: false, message: result.error.message };
+                        }
+
+                        isDrawing = false;
+                        showStatus("✅ 抽选成功！今日由 " + todayPicker + " 决定吃 " + restaurant, 'ok');
+                        return { success: true, picker: todayPicker, restaurant: restaurant };
+                    });
+                })
+                .catch(function(err) {
+                    isDrawing = false;
+                    showStatus("❌ 异常: " + err.message, 'error');
+                    return { success: false, message: err.message };
+                });
+        }
+
+        // ============ 渲染界面 ============
+        function renderUI() {
+            return fetchTodayRecord()
+                .then(function(todayRecord) {
+                    return fetchAllRecords().then(function(allRecords) {
+                        var todayPicker;
+
+                        if (todayRecord) {
+                            // ✅ 今日已有记录：执剑人 = 记录中的点餐官
+                            todayPicker = todayRecord.picker;
+                        } else {
+                            // ✅ 今日无记录：计算今日应该由谁执剑
+                            todayPicker = selectRandomPicker(allRecords);
+                        }
+
+                        // 更新顶部"今日执剑人"
+                        document.getElementById("todayPickerName").innerText = todayPicker;
+
+                        var pickerSpan = document.getElementById("pickerDisplay");
+                        var restaurantSpan = document.getElementById("restaurantDisplay");
+
+                        if (todayRecord) {
+                            pickerSpan.innerText = todayRecord.picker;
+                            restaurantSpan.innerText = todayRecord.restaurant;
+                        } else {
+                            pickerSpan.innerText = "⏳ 等待抽选";
+                            restaurantSpan.innerText = "❄️ 今日尚未抽选";
+                        }
+
+                        var historyList = document.getElementById("historyList");
+                        if (!allRecords || allRecords.length === 0) {
+                            historyList.innerHTML = '<div class="empty-history">🍃 暂无用餐记录，召唤第一签</div>';
+                            return;
+                        }
+
+                        var today = getTodayStr();
+                        var reversed = allRecords.slice().reverse();
+                        var html = '';
+                        for (var i = 0; i < reversed.length; i++) {
+                            var rec = reversed[i];
+                            var dateObj = new Date(rec.date);
+                            var displayDate = (dateObj.getMonth() + 1) + '/' + dateObj.getDate();
+                            var isToday = rec.date === today;
+                            html +=
+                                '<li class="history-item">' +
+                                '<span class="history-date">' + displayDate + '</span>' +
+                                '<span class="history-info">👤 <strong>' + rec.picker + '</strong> 执剑 · 🍚 ' + rec
+                                .restaurant + '</span>' +
+                                '<span style="font-size: 11px; background:#f2e1d2; padding:2px 10px; border-radius:20px;">' +
+                                (isToday ? '今日判决' : '') + '</span>' +
+                                '</li>';
+                        }
+                        historyList.innerHTML = html;
+                    });
+                })
+                .catch(function(err) {
+                    console.error("渲染界面失败:", err);
+                });
+        }
+
+        // ============ 抽签点击 ============
+        function onDrawClick() {
+            var btn = document.getElementById("drawBtn");
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> 抽签中...';
+
+            performDraw().then(function(result) {
+                btn.disabled = false;
+                btn.innerHTML = '🔮 今日 · 开饭抽签 🔮';
+
+                if (!result.success && result.alreadyExists) {
+                    renderUI();
+                    alert('⛔ 今日已经抽选过啦！\n点餐官：' + result.picker + '\n午餐：' + result.restaurant +
+                        '\n抽到不想吃的，含泪也要吃！');
+                    return;
+                }
+
+                if (result.success) {
+                    renderUI();
+                    alert('🍢 天命已定 🍢\n今日执剑人：' + result.picker + '\n今日午餐：' + result.restaurant +
+                        '\n\n「抽到不想吃的，含泪也要吃！」');
+                } else {
+                    alert('❌ 抽选失败: ' + (result.message || "未知错误"));
+                }
+            });
+        }
+
+        // ============ 实时订阅 ============
+        function subscribeToChanges() {
+            var channel = supabaseClient
+                .channel('lunch_records_sync')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'lunch_records' }, function() {
+                    console.log("📡 检测到云端变化，刷新界面");
+                    renderUI();
+                })
+                .subscribe(function(status) {
+                    console.log("订阅状态:", status);
+                });
+            return channel;
+        }
+
+        // ============ 初始化 ============
+        function initApp() {
+            if (isInitialized) return;
+
+            if (typeof window.supabase === 'undefined') {
+                showStatus("⏳ 正在加载 Supabase 库...", 'info');
+                var checkInterval = setInterval(function() {
+                    if (typeof window.supabase !== 'undefined') {
+                        clearInterval(checkInterval);
+                        initApp();
+                    }
+                }, 200);
+                setTimeout(function() {
+                    clearInterval(checkInterval);
+                    if (!isInitialized) {
+                        showStatus("❌ 库加载超时，请刷新页面", 'error');
+                    }
+                }, 10000);
                 return;
             }
-            dateArr.forEach(date => {
-                const item = document.createElement('div');
-                item.className = 'log-item';
-                const data = globalRecord[date];
-                item.innerText = `${date} | ${data.person} | ${data.shop}`;
-                logBox.appendChild(item);
-            })
-        }
 
-        // 获取昨日负责人，方案2选人过滤逻辑
-        function getYesterdayPerson() {
-            const yestDay = getYesterdayStr();
-            return globalRecord[yestDay] ? globalRecord[yestDay].person : null;
-        }
-        // 过滤近7天吃过的店铺
-        function getRecentEatShop() {
-            const today = new Date();
-            const eatShopSet = new Set();
-            for(let i = 1; i <=7; i++) {
-                const checkDay = new Date(today.getTime() - i * 24 * 3600 * 1000);
-                const dayStr = `${checkDay.getFullYear()}-${String(checkDay.getMonth()+1).padStart(2,'0')}-${String(checkDay.getDate()).padStart(2,'0')}`;
-                if(globalRecord[dayStr]) eatShopSet.add(globalRecord[dayStr].shop);
+            isInitialized = true;
+            showStatus("🔗 正在连接云端...", 'info');
+
+            try {
+                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+                supabaseClient.from('lunch_records').select('count', { count: 'exact', head: true })
+                    .then(function(result) {
+                        if (result.error) {
+                            showStatus("⚠️ 表访问异常: " + result.error.message + "，请确认表已创建", 'error');
+                        } else {
+                            showStatus("✅ 云端连接正常，数据实时同步中", 'ok');
+                        }
+                    })
+                    .catch(function(err) {
+                        showStatus("⚠️ 连接异常: " + err.message, 'error');
+                    });
+
+                renderUI();
+                subscribeToChanges();
+
+                document.getElementById("drawBtn").addEventListener("click", onDrawClick);
+
+            } catch (err) {
+                showStatus("❌ 初始化失败: " + err.message, 'error');
+                console.error("初始化失败:", err);
             }
-            return Array.from(eatShopSet);
         }
 
-        // 抽取负责人动画
-        async function runPersonAnimate() {
-            const today = getTodayStr();
-            if (globalRecord[today]) return;
-            pickPersonBtn.disabled = true;
-            pickShopBtn.disabled = true;
-            let count = 0;
-            const timer = setInterval(() => {
-                const temp = personList[Math.floor(Math.random() * personList.length)];
-                personShow.innerText = temp;
-                count++;
-                if(count >= 18) {
-                    clearInterval(timer);
-                    const yestP = getYesterdayPerson();
-                    let canPick = personList;
-                    if(yestP) canPick = personList.filter(p => p !== yestP);
-                    selectedPerson = canPick[Math.floor(Math.random() * canPick.length)];
-                    personShow.innerText = `🎯 今日选餐负责人：${selectedPerson}`;
-                    pickShopBtn.disabled = false;
-                }
-            }, 80);
-        }
+        // ============ 启动 ============
+        (function loadSupabase() {
+            if (typeof window.supabase !== 'undefined') {
+                initApp();
+                return;
+            }
+            var script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+            script.onload = function() {
+                console.log("✅ Supabase 库加载完成");
+                initApp();
+            };
+            script.onerror = function() {
+                showStatus("❌ 无法加载 Supabase 库，请检查网络", 'error');
+            };
+            document.head.appendChild(script);
+        })();
 
-        // 抽取店铺并永久保存云端
-        async function runShopAnimate() {
-            if(!selectedPerson) return;
-            const today = getTodayStr();
-            if (globalRecord[today]) return;
-            pickShopBtn.disabled = true;
-            let count = 0;
-            const timer = setInterval(() => {
-                const temp = allShopList[Math.floor(Math.random() * allShopList.length)];
-                shopShow.innerText = temp;
-                count++;
-                if(count >= 22) {
-                    clearInterval(timer);
-                    const recentEat = getRecentEatShop();
-                    let canChoose = allShopList.filter(shop => !recentEat.includes(shop));
-                    if(canChoose.length === 0) canChoose = allShopList;
-                    const finalShop = canChoose[Math.floor(Math.random() * canChoose.length)];
-                    shopShow.innerText = `✅ 今日午餐：${finalShop}`;
-                    globalRecord[today] = { person: selectedPerson, shop: finalShop };
-                    await saveCloudRecord();
-                    pickPersonBtn.disabled = true;
-                    pickPersonBtn.innerText = "今日已完成抽签，不可重复操作";
-                    pickShopBtn.disabled = true;
-                    renderLog();
-                }
-            }, 70);
-        }
-
-        pickPersonBtn.addEventListener('click', runPersonAnimate);
-        pickShopBtn.addEventListener('click', runShopAnimate);
-
-        // 页面首次加载
-        window.onload = async () => {
-            await fetchCloudRecord();
-            // 【修复2：清除旧定时器，新建安全轮询】
-            if(refreshTimer) clearInterval(refreshTimer);
-            refreshTimer = setInterval(() => {
-                fetchCloudRecord();
-            }, 15000); // 拉长到15秒，减少国内接口请求压力
-        }
+        setTimeout(function() {
+            if (!isInitialized && typeof window.supabase !== 'undefined') {
+                console.log("⏰ 超时触发初始化");
+                initApp();
+            }
+        }, 3000);
     </script>
 </body>
 </html>
