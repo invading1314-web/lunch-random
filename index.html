@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>午餐审判庭 · 随机轮值</title>
+    <title>午餐审判庭 · 稳定版</title>
     <style>
         * {
             box-sizing: border-box;
@@ -304,7 +304,6 @@
                 <span class="online-dot"></span> 🌐 云端同步 · 全员一致 🌐
             </div>
 
-            <!-- 今日执剑人（打开页面自动显示） -->
             <div class="today-picker-highlight">
                 🎯 今日执剑人：<strong id="todayPickerName">加载中...</strong>
             </div>
@@ -348,7 +347,7 @@
         // ============================================================
         // 🚨 请替换成你自己的 Supabase 配置！
         // ============================================================
-        var SUPABASE_URL = "https://ejlqgnhimnnaavwylcvi.supabase.co"; // 👈 替换这里
+      var SUPABASE_URL = "https://ejlqgnhimnnaavwylcvi.supabase.co"; // 👈 替换这里
         var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVqbHFnbmhpbW5uYWF2d3lsY3ZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1ODIzODMsImV4cCI6MjA5NzE1ODM4M30.XEdLs2SXAXhmxUeTEcvbglZD-sKZ_gSploT1OFVPGC8"; // 👈 替换这里
         // ============================================================
 
@@ -360,7 +359,7 @@
         }
 
         // ============================================================
-        // 🍽️ 餐厅列表（已移除「三江烩面」）
+        // 🍽️ 餐厅列表
         // ============================================================
         var FULL_RESTAURANT_LIST = [
             "漫柏沙县", "妯娌", "KFC", "正记", "忆面记", "锦海鸡公煲", "锦海陕西面馆",
@@ -369,18 +368,76 @@
             "寻味江西", "王家食堂", "麦当劳", "捡角"
         ];
 
-        // ⚠️ 抽到这些餐厅需要重新抽选
         var AVOID_RESTAURANTS = ["寻味江西", "巫山纸包鱼"];
-
         var PERSONS = ["陈鹏", "晨曦", "淑静", "王辰"];
         var RECENT_DAYS_LIMIT = 7;
 
         var supabaseClient = null;
         var isDrawing = false;
         var isInitialized = false;
-        var currentDrawResult = null;
-        var cachedTodayPicker = null; // 缓存今日执剑人
 
+        // ============ 🎯 核心：从 daily_picker 表获取今日执剑人 ============
+        function getTodayPicker() {
+            var today = getTodayStr();
+
+            // 1. 先查 daily_picker 表
+            return supabaseClient
+                .from('daily_picker')
+                .select('picker')
+                .eq('date', today)
+                .maybeSingle()
+                .then(function(result) {
+                    if (result.error && result.error.code !== 'PGRST116') {
+                        console.error("查询 daily_picker 失败:", result.error);
+                        // 降级处理
+                        return PERSONS[0];
+                    }
+
+                    // 如果找到了，直接返回
+                    if (result.data) {
+                        console.log("✅ 从 daily_picker 读取执剑人:", result.data.picker);
+                        return result.data.picker;
+                    }
+
+                    // 2. 今天没有记录 → 计算并写入
+                    console.log("📝 daily_picker 无记录，开始计算...");
+                    return fetchAllLunchRecords()
+                        .then(function(allRecords) {
+                            var picker = selectRandomPicker(allRecords);
+                            console.log("🎯 计算得到执剑人:", picker);
+
+                            // 写入 daily_picker 表
+                            return supabaseClient
+                                .from('daily_picker')
+                                .insert({ date: today, picker: picker })
+                                .then(function(insertResult) {
+                                    if (insertResult.error) {
+                                        // 如果冲突（别人刚写了），重新查询
+                                        if (insertResult.error.code === '23505') {
+                                            return supabaseClient
+                                                .from('daily_picker')
+                                                .select('picker')
+                                                .eq('date', today)
+                                                .maybeSingle()
+                                                .then(function(retryResult) {
+                                                    if (retryResult.data) {
+                                                        return retryResult.data
+                                                        .picker;
+                                                    }
+                                                    return picker;
+                                                });
+                                        }
+                                        console.error("写入 daily_picker 失败:",
+                                            insertResult.error);
+                                        return picker;
+                                    }
+                                    return picker;
+                                });
+                        });
+                });
+        }
+
+        // ============ 辅助函数 ============
         function getTodayStr() {
             return new Date().toISOString().slice(0, 10);
         }
@@ -395,7 +452,6 @@
             }
         }
 
-        // ============ 🎯 核心：随机选择执剑人（7天内不重复）============
         function selectRandomPicker(historyRecords) {
             var today = getTodayStr();
 
@@ -426,7 +482,6 @@
             return available[randomIndex];
         }
 
-        // ============ 选择餐厅（排除黑名单）============
         function selectRestaurant(historyRecords, excludeRestaurant) {
             var today = getTodayStr();
             var limitDate = new Date();
@@ -468,7 +523,7 @@
         }
 
         // ============ Supabase 操作 ============
-        function fetchAllRecords() {
+        function fetchAllLunchRecords() {
             return supabaseClient
                 .from('lunch_records')
                 .select('*')
@@ -478,11 +533,12 @@
                         console.error("获取记录失败:", result.error);
                         return [];
                     }
-                    return result.data || [];
+                    var data = result.data || [];
+                    return data.filter(function(rec) { return rec.restaurant !== null && rec.restaurant !== ''; });
                 });
         }
 
-        function fetchTodayRecord() {
+        function fetchTodayLunchRecord() {
             var today = getTodayStr();
             return supabaseClient
                 .from('lunch_records')
@@ -498,7 +554,7 @@
                 });
         }
 
-        function deleteTodayRecord() {
+        function deleteTodayLunchRecord() {
             var today = getTodayStr();
             return supabaseClient
                 .from('lunch_records')
@@ -520,9 +576,9 @@
             }
             isDrawing = true;
 
-            return fetchTodayRecord()
+            return fetchTodayLunchRecord()
                 .then(function(existing) {
-                    if (existing) {
+                    if (existing && existing.restaurant) {
                         isDrawing = false;
                         return {
                             success: false,
@@ -531,65 +587,49 @@
                             restaurant: existing.restaurant
                         };
                     }
-                    return fetchAllRecords();
-                })
-                .then(function(allRecords) {
-                    if (allRecords.success !== undefined) {
-                        return allRecords;
-                    }
 
-                    // 使用缓存的今日执剑人，如果没有则重新计算
-                    var todayPicker = cachedTodayPicker || selectRandomPicker(allRecords);
-                    cachedTodayPicker = todayPicker;
+                    return getTodayPicker().then(function(todayPicker) {
+                        return fetchAllLunchRecords().then(function(allRecords) {
+                            var restaurant = selectRestaurant(allRecords, avoidRestaurant ||
+                            null);
 
-                    var restaurant = selectRestaurant(allRecords, avoidRestaurant || null);
-
-                    currentDrawResult = {
-                        picker: todayPicker,
-                        restaurant: restaurant
-                    };
-
-                    return supabaseClient.from('lunch_records').insert([{
-                        date: getTodayStr(),
-                        picker: todayPicker,
-                        restaurant: restaurant
-                    }]).then(function(result) {
-                        if (result.error) {
-                            if (result.error.code === '23505') {
-                                return fetchTodayRecord().then(function(latest) {
+                            return supabaseClient
+                                .from('lunch_records')
+                                .upsert({
+                                    date: getTodayStr(),
+                                    picker: todayPicker,
+                                    restaurant: restaurant
+                                }, { onConflict: 'date' })
+                                .then(function(result) {
                                     isDrawing = false;
-                                    if (latest) {
-                                        return {
-                                            success: false,
-                                            alreadyExists: true,
-                                            picker: latest.picker,
-                                            restaurant: latest.restaurant
-                                        };
+
+                                    if (result.error) {
+                                        showStatus("❌ 抽选失败: " + result.error.message,
+                                            'error');
+                                        return { success: false, message: result.error
+                                                .message };
                                     }
-                                    return { success: false, message: result.error.message };
+
+                                    var isAvoid = AVOID_RESTAURANTS.indexOf(restaurant) !==
+                                        -1;
+
+                                    if (isAvoid) {
+                                        showStatus("⚠️ 抽到了「" + restaurant +
+                                            "」，可点击「重新抽签」再抽一次！",
+                                        'warning');
+                                    } else {
+                                        showStatus("✅ 抽选成功！今日由 " + todayPicker +
+                                            " 决定吃 " + restaurant, 'ok');
+                                    }
+
+                                    return {
+                                        success: true,
+                                        picker: todayPicker,
+                                        restaurant: restaurant,
+                                        isAvoid: isAvoid
+                                    };
                                 });
-                            }
-                            isDrawing = false;
-                            showStatus("❌ 插入失败: " + result.error.message, 'error');
-                            return { success: false, message: result.error.message };
-                        }
-
-                        isDrawing = false;
-
-                        var isAvoid = AVOID_RESTAURANTS.indexOf(restaurant) !== -1;
-
-                        if (isAvoid) {
-                            showStatus("⚠️ 抽到了「" + restaurant + "」，可点击「重新抽签」再抽一次！", 'warning');
-                        } else {
-                            showStatus("✅ 抽选成功！今日由 " + todayPicker + " 决定吃 " + restaurant, 'ok');
-                        }
-
-                        return {
-                            success: true,
-                            picker: todayPicker,
-                            restaurant: restaurant,
-                            isAvoid: isAvoid
-                        };
+                        });
                     });
                 })
                 .catch(function(err) {
@@ -605,10 +645,10 @@
                 return Promise.resolve({ success: false, message: "抽选中，请勿重复点击" });
             }
 
-            return fetchTodayRecord()
+            return fetchTodayLunchRecord()
                 .then(function(existing) {
-                    if (!existing) {
-                        return { success: false, message: "今日尚无记录，请先抽选" };
+                    if (!existing || !existing.restaurant) {
+                        return { success: false, message: "今日尚无餐厅记录，请先抽选" };
                     }
 
                     if (AVOID_RESTAURANTS.indexOf(existing.restaurant) === -1) {
@@ -620,60 +660,25 @@
 
                     isDrawing = true;
 
-                    return deleteTodayRecord()
+                    return deleteTodayLunchRecord()
                         .then(function(deleted) {
                             if (!deleted) {
                                 isDrawing = false;
                                 return { success: false, message: "删除记录失败" };
                             }
 
-                            return fetchAllRecords()
-                                .then(function(allRecords) {
-                                    // 使用缓存的今日执剑人
-                                    var todayPicker = cachedTodayPicker || selectRandomPicker(
-                                    allRecords);
-                                    cachedTodayPicker = todayPicker;
-
-                                    var restaurant = selectRestaurant(allRecords, existing.restaurant);
-
-                                    currentDrawResult = {
-                                        picker: todayPicker,
-                                        restaurant: restaurant
-                                    };
-
-                                    return supabaseClient.from('lunch_records').insert([{
+                            return getTodayPicker().then(function(todayPicker) {
+                                return supabaseClient
+                                    .from('lunch_records')
+                                    .insert([{
                                         date: getTodayStr(),
                                         picker: todayPicker,
-                                        restaurant: restaurant
-                                    }]).then(function(result) {
-                                        isDrawing = false;
-
-                                        if (result.error) {
-                                            showStatus("❌ 重新抽选失败: " + result.error
-                                                .message, 'error');
-                                            return { success: false, message: result.error
-                                                    .message };
-                                        }
-
-                                        var isAvoid = AVOID_RESTAURANTS.indexOf(restaurant) !==
-                                        -1;
-
-                                        if (isAvoid) {
-                                            showStatus("⚠️ 又抽到了「" + restaurant +
-                                                "」，可再次点击「重新抽签」！", 'warning');
-                                        } else {
-                                            showStatus("✅ 重新抽选成功！今日由 " + todayPicker +
-                                                " 决定吃 " + restaurant, 'ok');
-                                        }
-
-                                        return {
-                                            success: true,
-                                            picker: todayPicker,
-                                            restaurant: restaurant,
-                                            isAvoid: isAvoid
-                                        };
+                                        restaurant: null
+                                    }])
+                                    .then(function() {
+                                        return performDraw(existing.restaurant);
                                     });
-                                });
+                            });
                         });
                 })
                 .catch(function(err) {
@@ -683,46 +688,21 @@
                 });
         }
 
-        // ============ 🎯 核心：更新今日执剑人显示 ============
-        function updateTodayPickerDisplay(historyRecords) {
-            // 先查今日是否有记录
-            return fetchTodayRecord()
-                .then(function(todayRecord) {
-                    if (todayRecord) {
-                        // 今日已有记录，直接用记录中的执剑人
-                        cachedTodayPicker = todayRecord.picker;
-                        document.getElementById("todayPickerName").innerText = todayRecord.picker;
-                        return;
-                    }
-
-                    // 今日无记录，计算今日执剑人
-                    var picker = selectRandomPicker(historyRecords);
-                    cachedTodayPicker = picker;
-                    document.getElementById("todayPickerName").innerText = picker;
-                });
-        }
-
         // ============ 渲染界面 ============
         function renderUI() {
-            return fetchTodayRecord()
-                .then(function(todayRecord) {
-                    return fetchAllRecords().then(function(allRecords) {
-                        // 🔥 先更新今日执剑人（自动选择）
-                        if (todayRecord) {
-                            cachedTodayPicker = todayRecord.picker;
-                            document.getElementById("todayPickerName").innerText = todayRecord.picker;
-                        } else {
-                            var picker = selectRandomPicker(allRecords);
-                            cachedTodayPicker = picker;
-                            document.getElementById("todayPickerName").innerText = picker;
-                        }
+            return getTodayPicker()
+                .then(function(todayPicker) {
+                    document.getElementById("todayPickerName").innerText = todayPicker;
 
+                    return fetchTodayLunchRecord().then(function(todayRecord) {
                         var pickerSpan = document.getElementById("pickerDisplay");
                         var restaurantSpan = document.getElementById("restaurantDisplay");
                         var reDrawHint = document.getElementById("reDrawHint");
                         var reDrawBtn = document.getElementById("reDrawBtn");
 
-                        if (todayRecord) {
+                        var hasFullRecord = todayRecord && todayRecord.restaurant;
+
+                        if (hasFullRecord) {
                             pickerSpan.innerText = todayRecord.picker;
                             restaurantSpan.innerText = todayRecord.restaurant;
 
@@ -744,37 +724,42 @@
                             reDrawBtn.style.display = "none";
                         }
 
-                        var historyList = document.getElementById("historyList");
-                        if (!allRecords || allRecords.length === 0) {
-                            historyList.innerHTML = '<div class="empty-history">🍃 暂无用餐记录，召唤第一签</div>';
-                            return;
-                        }
+                        return fetchAllLunchRecords().then(function(allRecords) {
+                            var historyList = document.getElementById("historyList");
 
-                        var today = getTodayStr();
-                        var reversed = allRecords.slice().reverse();
-                        var html = '';
-                        for (var i = 0; i < reversed.length; i++) {
-                            var rec = reversed[i];
-                            var dateObj = new Date(rec.date);
-                            var displayDate = (dateObj.getMonth() + 1) + '/' + dateObj.getDate();
-                            var isToday = rec.date === today;
-                            var isAvoid = AVOID_RESTAURANTS.indexOf(rec.restaurant) !== -1;
-                            html +=
-                                '<li class="history-item">' +
-                                '<span class="history-date">' + displayDate + '</span>' +
-                                '<span class="history-info">👤 <strong>' + rec.picker + '</strong> 执剑 · 🍚 ' + rec
-                                .restaurant +
-                                (isAvoid ? ' <span class="avoid-badge">⚠️ 重新抽过</span>' : '') +
-                                '</span>' +
-                                '<span style="font-size: 11px; background:#f2e1d2; padding:2px 10px; border-radius:20px;">' +
-                                (isToday ? '今日判决' : '') + '</span>' +
-                                '</li>';
-                        }
-                        historyList.innerHTML = html;
+                            if (!allRecords || allRecords.length === 0) {
+                                historyList.innerHTML =
+                                    '<div class="empty-history">🍃 暂无用餐记录，召唤第一签</div>';
+                                return;
+                            }
+
+                            var today = getTodayStr();
+                            var reversed = allRecords.slice().reverse();
+                            var html = '';
+                            for (var i = 0; i < reversed.length; i++) {
+                                var rec = reversed[i];
+                                var dateObj = new Date(rec.date);
+                                var displayDate = (dateObj.getMonth() + 1) + '/' + dateObj.getDate();
+                                var isToday = rec.date === today;
+                                var isAvoid = AVOID_RESTAURANTS.indexOf(rec.restaurant) !== -1;
+                                html +=
+                                    '<li class="history-item">' +
+                                    '<span class="history-date">' + displayDate + '</span>' +
+                                    '<span class="history-info">👤 <strong>' + rec.picker +
+                                    '</strong> 执剑 · 🍚 ' + rec.restaurant +
+                                    (isAvoid ? ' <span class="avoid-badge">⚠️ 重新抽过</span>' : '') +
+                                    '</span>' +
+                                    '<span style="font-size: 11px; background:#f2e1d2; padding:2px 10px; border-radius:20px;">' +
+                                    (isToday ? '今日判决' : '') + '</span>' +
+                                    '</li>';
+                            }
+                            historyList.innerHTML = html;
+                        });
                     });
                 })
                 .catch(function(err) {
                     console.error("渲染界面失败:", err);
+                    showStatus("渲染界面失败: " + err.message, 'error');
                 });
         }
 
@@ -879,10 +864,11 @@
             try {
                 supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-                supabaseClient.from('lunch_records').select('count', { count: 'exact', head: true })
+                supabaseClient.from('daily_picker').select('count', { count: 'exact', head: true })
                     .then(function(result) {
                         if (result.error) {
-                            showStatus("⚠️ 表访问异常: " + result.error.message + "，请确认表已创建", 'error');
+                            showStatus("⚠️ daily_picker 表访问异常: " + result.error.message +
+                                "，请确认已创建 daily_picker 表", 'error');
                         } else {
                             showStatus("✅ 云端连接正常，数据实时同步中", 'ok');
                         }
@@ -891,15 +877,7 @@
                         showStatus("⚠️ 连接异常: " + err.message, 'error');
                     });
 
-                // 🔥 先获取所有记录，然后自动计算并显示今日执剑人
-                fetchAllRecords().then(function(allRecords) {
-                    // 更新今日执剑人显示
-                    return updateTodayPickerDisplay(allRecords);
-                }).then(function() {
-                    // 然后渲染完整界面
-                    return renderUI();
-                });
-
+                renderUI();
                 subscribeToChanges();
 
                 document.getElementById("drawBtn").addEventListener("click", onDrawClick);
