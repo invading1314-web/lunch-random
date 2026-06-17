@@ -123,6 +123,10 @@
             color: #2d241d;
             margin: 12px 0 6px;
         }
+        .result-name.highlight-avoid {
+            color: #d45a38;
+            text-decoration: line-through;
+        }
         .btn {
             border: none;
             padding: 14px 32px;
@@ -146,6 +150,13 @@
             background: #c2a088;
             cursor: not-allowed;
             opacity: 0.7;
+        }
+        .btn-secondary {
+            background: #e8dcd0;
+            color: #5a4030;
+        }
+        .btn-secondary:active {
+            transform: scale(0.97);
         }
         .history-section {
             background: #fff7ef;
@@ -192,6 +203,15 @@
         .history-info {
             flex: 1;
             margin: 0 12px;
+        }
+        .history-info .avoid-badge {
+            background: #fde8e8;
+            color: #b91c1c;
+            font-size: 0.6rem;
+            padding: 2px 8px;
+            border-radius: 12px;
+            margin-left: 6px;
+            font-weight: 600;
         }
         .live-tip {
             background: #2c241e;
@@ -253,6 +273,16 @@
             border-left: 4px solid #1a5a7a;
             text-align: left;
         }
+        .status-warning {
+            background: #fff3e6;
+            color: #b85a1a;
+            padding: 12px 16px;
+            border-radius: 12px;
+            margin: 10px 0;
+            font-size: 0.85rem;
+            border-left: 4px solid #dd6b42;
+            text-align: left;
+        }
         @media (max-width: 500px) {
             .result-name {
                 font-size: 1.7rem;
@@ -274,7 +304,6 @@
                 <span class="online-dot"></span> 🌐 云端同步 · 全员一致 🌐
             </div>
 
-            <!-- 今日执剑人 -->
             <div class="today-picker-highlight">
                 🎯 今日执剑人：<strong id="todayPickerName">加载中...</strong>
             </div>
@@ -285,15 +314,19 @@
                 <div style="margin-top: 10px; font-size: 0.85rem; color: #a08068;">
                     由 <strong id="pickerDisplay">—</strong> 执剑
                 </div>
+                <div id="reDrawHint" style="margin-top: 8px; font-size: 0.8rem; color: #d45a38; display: none;">
+                    🔄 抽到「寻味江西」或「巫山纸包鱼」可重新抽选！
+                </div>
             </div>
 
             <div style="display: flex; justify-content: center; gap: 12px; flex-wrap: wrap;">
                 <button class="btn btn-primary" id="drawBtn">🔮 今日 · 开饭抽签 🔮</button>
+                <button class="btn btn-secondary" id="reDrawBtn" style="display:none;">🔄 重新抽签</button>
             </div>
             <div id="statusDisplay"></div>
             <div class="live-tip">
                 💢 每天自动随机一位点餐官（7天内不重复） · 餐厅七天内不重样 · 每日仅可抽选一次<br>
-                ✅ 任何人抽选后，所有人实时同步看到结果
+                🚫 已取消「三江烩面」 · 抽到「寻味江西」「巫山纸包鱼」可重新抽选一次
             </div>
         </div>
         <div class="history-section">
@@ -316,6 +349,7 @@
         // ============================================================
        var SUPABASE_URL = "https://ejlqgnhimnnaavwylcvi.supabase.co"; // 👈 替换这里
         var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVqbHFnbmhpbW5uYWF2d3lsY3ZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1ODIzODMsImV4cCI6MjA5NzE1ODM4M30.XEdLs2SXAXhmxUeTEcvbglZD-sKZ_gSploT1OFVPGC8"; // 👈 替换这里
+
         // ============================================================
 
         if (SUPABASE_URL.indexOf("你的项目") !== -1 || SUPABASE_ANON_KEY.indexOf("你的anon") !== -1) {
@@ -325,18 +359,26 @@
             throw new Error("请先配置 Supabase 密钥");
         }
 
+        // ============================================================
+        // 🍽️ 餐厅列表（已移除「三江烩面」）
+        // ============================================================
         var FULL_RESTAURANT_LIST = [
             "漫柏沙县", "妯娌", "KFC", "正记", "忆面记", "锦海鸡公煲", "锦海陕西面馆",
             "锦海锅贴", "胖妹", "漫柏猪脚饭", "三江沙县", "天福麻辣烫", "漫柏烤肉饭",
-            "小湖兰州拉面", "漫泊木桶饭", "漫泊麻辣香锅", "三江烩面", "巫山纸包鱼",
+            "小湖兰州拉面", "漫泊木桶饭", "漫泊麻辣香锅", "巫山纸包鱼",
             "寻味江西", "王家食堂", "麦当劳", "捡角"
         ];
+
+        // ⚠️ 抽到这些餐厅需要重新抽选
+        var AVOID_RESTAURANTS = ["寻味江西", "巫山纸包鱼"];
+
         var PERSONS = ["陈鹏", "晨曦", "淑静", "王辰"];
         var RECENT_DAYS_LIMIT = 7;
 
         var supabaseClient = null;
         var isDrawing = false;
         var isInitialized = false;
+        var currentDrawResult = null; // 存储当前抽选结果，用于重新抽选
 
         function getTodayStr() {
             return new Date().toISOString().slice(0, 10);
@@ -346,16 +388,16 @@
             type = type || 'info';
             var el = document.getElementById("statusDisplay");
             if (el) {
-                var className = type === 'error' ? 'status-error' : type === 'ok' ? 'status-ok' : 'status-info';
+                var className = type === 'error' ? 'status-error' : type === 'ok' ? 'status-ok' : type === 'warning' ?
+                    'status-warning' : 'status-info';
                 el.innerHTML = '<div class="' + className + '">' + message + '</div>';
             }
         }
 
-        // ============ 🔧 核心：随机选择执剑人（7天内不重复）============
+        // ============ 随机选择执剑人（7天内不重复）============
         function selectRandomPicker(historyRecords) {
             var today = getTodayStr();
 
-            // 收集过去7天内当过执剑人的人
             var limitDate = new Date();
             limitDate.setDate(limitDate.getDate() - RECENT_DAYS_LIMIT);
 
@@ -363,13 +405,11 @@
             for (var i = 0; i < historyRecords.length; i++) {
                 var rec = historyRecords[i];
                 var recDate = new Date(rec.date);
-                // 排除今天（今天还没抽）
                 if (recDate >= limitDate && rec.date !== today) {
                     recentPickers[rec.picker] = true;
                 }
             }
 
-            // 找出可用的人（过去7天没当过的）
             var available = [];
             for (var j = 0; j < PERSONS.length; j++) {
                 if (!recentPickers[PERSONS[j]]) {
@@ -377,12 +417,53 @@
                 }
             }
 
-            // 如果所有人都当过（极端情况，比如只有4个人但7天内都轮过了），就全部放开
             if (available.length === 0) {
                 available = PERSONS.slice();
             }
 
-            // 随机选一个
+            var randomIndex = Math.floor(Math.random() * available.length);
+            return available[randomIndex];
+        }
+
+        // ============ 选择餐厅（排除黑名单）============
+        function selectRestaurant(historyRecords, excludeRestaurant) {
+            var today = getTodayStr();
+            var limitDate = new Date();
+            limitDate.setDate(limitDate.getDate() - RECENT_DAYS_LIMIT);
+
+            var blacklist = {};
+            for (var i = 0; i < historyRecords.length; i++) {
+                var rec = historyRecords[i];
+                var recDate = new Date(rec.date);
+                if (recDate >= limitDate && rec.date !== today) {
+                    blacklist[rec.restaurant] = true;
+                }
+            }
+
+            // 如果要排除某个餐厅（用于重新抽选）
+            if (excludeRestaurant) {
+                blacklist[excludeRestaurant] = true;
+            }
+
+            var available = [];
+            for (var j = 0; j < FULL_RESTAURANT_LIST.length; j++) {
+                var r = FULL_RESTAURANT_LIST[j];
+                if (!blacklist[r]) {
+                    available.push(r);
+                }
+            }
+
+            // 如果可用列表为空（极端情况），去掉所有黑名单限制
+            if (available.length === 0) {
+                available = FULL_RESTAURANT_LIST.slice();
+                if (excludeRestaurant) {
+                    available = available.filter(function(r) { return r !== excludeRestaurant; });
+                }
+                if (available.length === 0) {
+                    available = FULL_RESTAURANT_LIST.slice();
+                }
+            }
+
             var randomIndex = Math.floor(Math.random() * available.length);
             return available[randomIndex];
         }
@@ -418,35 +499,23 @@
                 });
         }
 
-        function computeRestaurant(historyRecords) {
+        function deleteTodayRecord() {
             var today = getTodayStr();
-            var limitDate = new Date();
-            limitDate.setDate(limitDate.getDate() - RECENT_DAYS_LIMIT);
-
-            var blacklist = {};
-            for (var i = 0; i < historyRecords.length; i++) {
-                var rec = historyRecords[i];
-                var recDate = new Date(rec.date);
-                if (recDate >= limitDate && rec.date !== today) {
-                    blacklist[rec.restaurant] = true;
-                }
-            }
-
-            var available = [];
-            for (var j = 0; j < FULL_RESTAURANT_LIST.length; j++) {
-                var r = FULL_RESTAURANT_LIST[j];
-                if (!blacklist[r]) {
-                    available.push(r);
-                }
-            }
-            if (available.length === 0) {
-                available = FULL_RESTAURANT_LIST.slice();
-            }
-            var randomIndex = Math.floor(Math.random() * available.length);
-            return available[randomIndex];
+            return supabaseClient
+                .from('lunch_records')
+                .delete()
+                .eq('date', today)
+                .then(function(result) {
+                    if (result.error) {
+                        console.error("删除今日记录失败:", result.error);
+                        return false;
+                    }
+                    return true;
+                });
         }
 
-        function performDraw() {
+        // ============ 执行抽选 ============
+        function performDraw(avoidRestaurant) {
             if (isDrawing) {
                 return Promise.resolve({ success: false, message: "抽选中，请勿重复点击" });
             }
@@ -470,9 +539,13 @@
                         return allRecords;
                     }
 
-                    // 🎯 随机选择执剑人（7天内不重复）
                     var todayPicker = selectRandomPicker(allRecords);
-                    var restaurant = computeRestaurant(allRecords);
+                    var restaurant = selectRestaurant(allRecords, avoidRestaurant || null);
+
+                    currentDrawResult = {
+                        picker: todayPicker,
+                        restaurant: restaurant
+                    };
 
                     return supabaseClient.from('lunch_records').insert([{
                         date: getTodayStr(),
@@ -500,13 +573,110 @@
                         }
 
                         isDrawing = false;
-                        showStatus("✅ 抽选成功！今日由 " + todayPicker + " 决定吃 " + restaurant, 'ok');
-                        return { success: true, picker: todayPicker, restaurant: restaurant };
+
+                        // 检查是否抽到需要重新抽选的餐厅
+                        var isAvoid = AVOID_RESTAURANTS.indexOf(restaurant) !== -1;
+
+                        if (isAvoid) {
+                            showStatus("⚠️ 抽到了「" + restaurant + "」，可点击「重新抽签」再抽一次！", 'warning');
+                        } else {
+                            showStatus("✅ 抽选成功！今日由 " + todayPicker + " 决定吃 " + restaurant, 'ok');
+                        }
+
+                        return {
+                            success: true,
+                            picker: todayPicker,
+                            restaurant: restaurant,
+                            isAvoid: isAvoid
+                        };
                     });
                 })
                 .catch(function(err) {
                     isDrawing = false;
                     showStatus("❌ 异常: " + err.message, 'error');
+                    return { success: false, message: err.message };
+                });
+        }
+
+        // ============ 执行重新抽选 ============
+        function performReDraw() {
+            if (isDrawing) {
+                return Promise.resolve({ success: false, message: "抽选中，请勿重复点击" });
+            }
+
+            // 检查今天是否有记录
+            return fetchTodayRecord()
+                .then(function(existing) {
+                    if (!existing) {
+                        return { success: false, message: "今日尚无记录，请先抽选" };
+                    }
+
+                    // 检查今天的餐厅是否是需要规避的
+                    if (AVOID_RESTAURANTS.indexOf(existing.restaurant) === -1) {
+                        return {
+                            success: false,
+                            message: "「" + existing.restaurant + "」不需要重新抽选"
+                        };
+                    }
+
+                    isDrawing = true;
+
+                    // 删除今天的记录
+                    return deleteTodayRecord()
+                        .then(function(deleted) {
+                            if (!deleted) {
+                                isDrawing = false;
+                                return { success: false, message: "删除记录失败" };
+                            }
+
+                            // 重新抽选（排除当前餐厅）
+                            return fetchAllRecords()
+                                .then(function(allRecords) {
+                                    var todayPicker = selectRandomPicker(allRecords);
+                                    var restaurant = selectRestaurant(allRecords, existing.restaurant);
+
+                                    currentDrawResult = {
+                                        picker: todayPicker,
+                                        restaurant: restaurant
+                                    };
+
+                                    return supabaseClient.from('lunch_records').insert([{
+                                        date: getTodayStr(),
+                                        picker: todayPicker,
+                                        restaurant: restaurant
+                                    }]).then(function(result) {
+                                        isDrawing = false;
+
+                                        if (result.error) {
+                                            showStatus("❌ 重新抽选失败: " + result.error.message,
+                                            'error');
+                                            return { success: false, message: result.error
+                                                    .message };
+                                        }
+
+                                        var isAvoid = AVOID_RESTAURANTS.indexOf(restaurant) !== -1;
+
+                                        if (isAvoid) {
+                                            showStatus("⚠️ 又抽到了「" + restaurant +
+                                                "」，可再次点击「重新抽签」！", 'warning');
+                                        } else {
+                                            showStatus("✅ 重新抽选成功！今日由 " + todayPicker +
+                                                " 决定吃 " + restaurant, 'ok');
+                                        }
+
+                                        return {
+                                            success: true,
+                                            picker: todayPicker,
+                                            restaurant: restaurant,
+                                            isAvoid: isAvoid
+                                        };
+                                    });
+                                });
+                        });
+                })
+                .catch(function(err) {
+                    isDrawing = false;
+                    showStatus("❌ 重新抽选异常: " + err.message, 'error');
                     return { success: false, message: err.message };
                 });
         }
@@ -519,25 +689,39 @@
                         var todayPicker;
 
                         if (todayRecord) {
-                            // ✅ 今日已有记录：执剑人 = 记录中的点餐官
                             todayPicker = todayRecord.picker;
                         } else {
-                            // ✅ 今日无记录：计算今日应该由谁执剑
                             todayPicker = selectRandomPicker(allRecords);
                         }
 
-                        // 更新顶部"今日执剑人"
                         document.getElementById("todayPickerName").innerText = todayPicker;
 
                         var pickerSpan = document.getElementById("pickerDisplay");
                         var restaurantSpan = document.getElementById("restaurantDisplay");
+                        var reDrawHint = document.getElementById("reDrawHint");
+                        var reDrawBtn = document.getElementById("reDrawBtn");
 
                         if (todayRecord) {
                             pickerSpan.innerText = todayRecord.picker;
                             restaurantSpan.innerText = todayRecord.restaurant;
+
+                            // 检查是否需要显示重新抽选按钮
+                            var isAvoid = AVOID_RESTAURANTS.indexOf(todayRecord.restaurant) !== -1;
+                            if (isAvoid) {
+                                reDrawHint.style.display = "block";
+                                reDrawBtn.style.display = "inline-block";
+                                restaurantSpan.className = "result-name highlight-avoid";
+                            } else {
+                                reDrawHint.style.display = "none";
+                                reDrawBtn.style.display = "none";
+                                restaurantSpan.className = "result-name";
+                            }
                         } else {
                             pickerSpan.innerText = "⏳ 等待抽选";
                             restaurantSpan.innerText = "❄️ 今日尚未抽选";
+                            restaurantSpan.className = "result-name";
+                            reDrawHint.style.display = "none";
+                            reDrawBtn.style.display = "none";
                         }
 
                         var historyList = document.getElementById("historyList");
@@ -554,11 +738,14 @@
                             var dateObj = new Date(rec.date);
                             var displayDate = (dateObj.getMonth() + 1) + '/' + dateObj.getDate();
                             var isToday = rec.date === today;
+                            var isAvoid = AVOID_RESTAURANTS.indexOf(rec.restaurant) !== -1;
                             html +=
                                 '<li class="history-item">' +
                                 '<span class="history-date">' + displayDate + '</span>' +
                                 '<span class="history-info">👤 <strong>' + rec.picker + '</strong> 执剑 · 🍚 ' + rec
-                                .restaurant + '</span>' +
+                                .restaurant +
+                                (isAvoid ? ' <span class="avoid-badge">⚠️ 重新抽过</span>' : '') +
+                                '</span>' +
                                 '<span style="font-size: 11px; background:#f2e1d2; padding:2px 10px; border-radius:20px;">' +
                                 (isToday ? '今日判决' : '') + '</span>' +
                                 '</li>';
@@ -577,7 +764,7 @@
             btn.disabled = true;
             btn.innerHTML = '<span class="loading"></span> 抽签中...';
 
-            performDraw().then(function(result) {
+            performDraw(null).then(function(result) {
                 btn.disabled = false;
                 btn.innerHTML = '🔮 今日 · 开饭抽签 🔮';
 
@@ -590,10 +777,43 @@
 
                 if (result.success) {
                     renderUI();
-                    alert('🍢 天命已定 🍢\n今日执剑人：' + result.picker + '\n今日午餐：' + result.restaurant +
-                        '\n\n「抽到不想吃的，含泪也要吃！」');
+
+                    if (result.isAvoid) {
+                        alert('⚠️ 抽到了「' + result.restaurant + '」\n\n点击「重新抽签」再抽一次！');
+                    } else {
+                        alert('🍢 天命已定 🍢\n今日执剑人：' + result.picker + '\n今日午餐：' + result.restaurant +
+                            '\n\n「抽到不想吃的，含泪也要吃！」');
+                    }
                 } else {
                     alert('❌ 抽选失败: ' + (result.message || "未知错误"));
+                }
+            });
+        }
+
+        // ============ 重新抽签点击 ============
+        function onReDrawClick() {
+            var btn = document.getElementById("reDrawBtn");
+            var mainBtn = document.getElementById("drawBtn");
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> 重抽中...';
+            mainBtn.disabled = true;
+
+            performReDraw().then(function(result) {
+                btn.disabled = false;
+                btn.innerHTML = '🔄 重新抽签';
+                mainBtn.disabled = false;
+
+                if (result.success) {
+                    renderUI();
+
+                    if (result.isAvoid) {
+                        alert('⚠️ 又抽到了「' + result.restaurant + '」\n\n点击「重新抽签」再抽一次！');
+                    } else {
+                        alert('🍢 重新抽选成功 🍢\n今日执剑人：' + result.picker + '\n今日午餐：' + result.restaurant +
+                            '\n\n「抽到不想吃的，含泪也要吃！」');
+                    }
+                } else {
+                    alert('❌ 重新抽选失败: ' + (result.message || "未知错误"));
                 }
             });
         }
@@ -655,6 +875,7 @@
                 subscribeToChanges();
 
                 document.getElementById("drawBtn").addEventListener("click", onDrawClick);
+                document.getElementById("reDrawBtn").addEventListener("click", onReDrawClick);
 
             } catch (err) {
                 showStatus("❌ 初始化失败: " + err.message, 'error');
