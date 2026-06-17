@@ -195,17 +195,38 @@
             color: #b8a890;
             border: 1px solid transparent;
             transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .restaurant-tag .del-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: transparent;
+            color: #4a3a2a;
+            border: none;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 700;
+            transition: 0.2s;
+            padding: 0;
+            line-height: 1;
+            margin-left: 2px;
+        }
+        .restaurant-tag .del-btn:hover {
+            background: #d45a38;
+            color: white;
+            transform: scale(1.2);
         }
         .restaurant-tag.used {
             color: #4a3a2a;
             text-decoration: line-through;
             background: #181818;
             opacity: 0.6;
-        }
-        .restaurant-tag.used::after {
-            content: ' ✕';
-            color: #d45a38;
-            font-size: 10px;
         }
         .restaurant-tag.active {
             background: #d45a38;
@@ -525,6 +546,64 @@
                 transform: translateY(-4px);
             }
         }
+
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #2a1a14;
+            color: #f5e8d8;
+            padding: 10px 24px;
+            border-radius: 16px;
+            font-size: 14px;
+            border: 1px solid #d45a38;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+            z-index: 999;
+            animation: toastIn 0.3s ease-out;
+            max-width: 90%;
+            text-align: center;
+        }
+        @keyframes toastIn {
+            0% {
+                opacity: 0;
+                transform: translateX(-50%) translateY(20px);
+            }
+            100% {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+
+        /* 加载状态 */
+        .loading-spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #2a2a2a;
+            border-top: 2px solid #d45a38;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .status-error {
+            color: #b91c1c !important;
+            border-color: #b91c1c !important;
+        }
+        .status-ok {
+            color: #4a8a5a !important;
+            border-color: #4a8a5a !important;
+        }
     </style>
 </head>
 <body>
@@ -547,7 +626,7 @@
         </div>
 
         <div class="restaurant-section">
-            <div class="section-label">🍽️ 干饭地点 · 天选之人请出手</div>
+            <div class="section-label">🍽️ 干饭地点 · 点击 ✕ 删除</div>
             <div class="restaurant-grid" id="restaurantGrid"></div>
             <div class="restaurant-add">
                 <input type="text" id="restaurantInput" placeholder="🍔 输入新餐厅，按回车">
@@ -569,7 +648,7 @@
                 🍚 干饭地点：<span class="resto-name" id="resultRestaurant">等待天选之人出手</span>
             </div>
             <div class="result-status" id="resultStatus">
-                ⏳ <span class="blink">正在纠结中</span> ... 其他人请安静 🤫
+                <span class="loading-spinner"></span> 连接云端...
             </div>
         </div>
 
@@ -588,17 +667,17 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
-    </script>
     <script>
         // ============================================================
         // 🚨 请替换成你自己的 Supabase 配置！
-        // 在 Supabase 项目 → Settings → API 中复制
         // ============================================================
         var SUPABASE_URL = "https://ejlqgnhimnnaavwylcvi.supabase.co"; // 👈 替换这里
         var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVqbHFnbmhpbW5uYWF2d3lsY3ZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1ODIzODMsImV4cCI6MjA5NzE1ODM4M30.XEdLs2SXAXhmxUeTEcvbglZD-sKZ_gSploT1OFVPGC8"; // 👈 替换这里
         // ============================================================
 
+        // ============================================================
+        // 😂 每日搞笑标语库
+        // ============================================================
         var SLOGANS = [
             "🍖 人生难题，一键解决",
             "🤔 今天吃啥？这是个哲学问题",
@@ -638,6 +717,7 @@
         var todayPicker = null;
         var restaurantList = [];
 
+        // ============ 工具函数 ============
         function getTodayStr() {
             return new Date().toISOString().slice(0, 10);
         }
@@ -659,6 +739,21 @@
             }
         }
 
+        function showToast(msg) {
+            var old = document.querySelector('.toast');
+            if (old) old.remove();
+
+            var toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.textContent = msg;
+            document.body.appendChild(toast);
+
+            setTimeout(function() {
+                if (toast.parentNode) toast.remove();
+            }, 2000);
+        }
+
+        // ============ 核心逻辑 ============
         function selectRandomPicker(records) {
             var today = getTodayStr();
             var limitDate = new Date();
@@ -703,6 +798,7 @@
             return available[Math.floor(Math.random() * available.length)];
         }
 
+        // ============ Supabase 操作 ============
         function fetchAllRecords() {
             return supabaseClient.from('lunch_records').select('*').order('date', { ascending: true })
                 .then(function(res) {
@@ -802,8 +898,38 @@
             });
         }
 
+        function deleteRestaurant(name) {
+            // 检查今天是否已使用
+            fetchTodayRecord().then(function(record) {
+                if (record && record.restaurant === name) {
+                    showToast('⚠️ 今天已经抽到「' + name + '」，不能删除');
+                    return;
+                }
+
+                var index = restaurantList.indexOf(name);
+                if (index === -1) return;
+
+                if (!confirm('确定要删除「' + name + '」吗？')) return;
+
+                restaurantList.splice(index, 1);
+                localStorage.setItem('lunch_restaurants', JSON.stringify(restaurantList));
+                renderUI();
+                showToast('✅ 已删除「' + name + '」');
+            });
+        }
+
+        // ============ 渲染 UI ============
         function renderUI() {
             document.getElementById("slogan").textContent = getDailySlogan();
+
+            // 加载餐厅列表
+            var saved = localStorage.getItem('lunch_restaurants');
+            if (saved) {
+                try { restaurantList = JSON.parse(saved); } catch (e) { restaurantList = DEFAULT_RESTAURANTS
+                        .slice(); }
+            } else {
+                restaurantList = DEFAULT_RESTAURANTS.slice();
+            }
 
             getTodayPicker().then(function(picker) {
                 todayPicker = picker;
@@ -821,32 +947,41 @@
                 }).join('');
             });
 
-            // 加载餐厅列表
-            var saved = localStorage.getItem('lunch_restaurants');
-            if (saved) {
-                try { restaurantList = JSON.parse(saved); } catch (e) { restaurantList = DEFAULT_RESTAURANTS
-                        .slice(); }
-            } else {
-                restaurantList = DEFAULT_RESTAURANTS.slice();
-            }
-
             fetchTodayRecord().then(function(record) {
                 var grid = document.getElementById("restaurantGrid");
                 grid.innerHTML = restaurantList.map(function(r) {
                     var cls = 'restaurant-tag';
                     if (record && record.restaurant === r) cls += ' active';
-                    return '<span class="' + cls + '">' + r + '</span>';
+                    return '<span class="' + cls + '">' +
+                        r +
+                        '<button class="del-btn" data-name="' + r + '" title="删除">✕</button>' +
+                        '</span>';
                 }).join('');
+
+                document.querySelectorAll('.restaurant-tag .del-btn').forEach(function(btn) {
+                    btn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        var name = this.getAttribute('data-name');
+                        deleteRestaurant(name);
+                    });
+                });
 
                 if (record && record.restaurant) {
                     document.getElementById("resultPicker").textContent = record.picker;
                     document.getElementById("resultRestaurant").textContent = record.restaurant;
                     document.getElementById("resultStatus").innerHTML = '✅ 今日已定！天选之人已出手 🎯';
                     document.getElementById("resultStatus").style.color = '#4a8a5a';
+
+                    if (AVOID_RESTAURANTS.indexOf(record.restaurant) !== -1) {
+                        document.getElementById("resultStatus").innerHTML = '⚠️ 抽到了「' + record.restaurant +
+                            '」可重新抽选 🔄';
+                        document.getElementById("resultStatus").style.color = '#d45a38';
+                    }
                 } else {
                     document.getElementById("resultPicker").textContent = todayPicker || '—';
                     document.getElementById("resultRestaurant").textContent = '⏳ 等待天选之人出手';
-                    document.getElementById("resultStatus").innerHTML = '⏳ <span class="blink">正在纠结中</span> ... 其他人请安静 🤫';
+                    document.getElementById("resultStatus").innerHTML =
+                        '⏳ <span class="blink">正在纠结中</span> ... 其他人请安静 🤫';
                     document.getElementById("resultStatus").style.color = '#6a5a4a';
                 }
             });
@@ -873,6 +1008,7 @@
             });
         }
 
+        // ============ 事件绑定 ============
         function bindEvents() {
             document.getElementById("fateBtn").addEventListener("click", function() {
                 var btn = this;
@@ -908,11 +1044,15 @@
                 var input = document.getElementById("restaurantInput");
                 var name = input.value.trim();
                 if (!name) return;
-                if (restaurantList.indexOf(name) !== -1) { alert('已存在'); return; }
+                if (restaurantList.indexOf(name) !== -1) {
+                    showToast('⚠️ 已存在「' + name + '」');
+                    return;
+                }
                 restaurantList.push(name);
                 localStorage.setItem('lunch_restaurants', JSON.stringify(restaurantList));
                 input.value = '';
                 renderUI();
+                showToast('✅ 已添加「' + name + '」');
             });
 
             document.getElementById("restaurantInput").addEventListener("keydown", function(e) {
@@ -924,7 +1064,7 @@
                 supabaseClient.from('lunch_records').delete().neq('id', 0).then(function() {
                     supabaseClient.from('daily_picker').delete().eq('date', getTodayStr())
                         .then(function() { renderUI();
-                            alert('✅ 已清空'); });
+                            showToast('✅ 已清空'); });
                 });
             });
         }
@@ -937,11 +1077,17 @@
             return channel;
         }
 
+        // ============ 初始化 ============
         function initApp() {
             if (isInitialized) return;
-            if (typeof window.supabase === 'undefined') { setTimeout(initApp, 300); return; }
+            if (typeof window.supabase === 'undefined') {
+                showStatus('⏳ 加载 Supabase 库...', false);
+                setTimeout(initApp, 300);
+                return;
+            }
 
             isInitialized = true;
+            showStatus('🔗 连接云端...', false);
 
             try {
                 supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -950,7 +1096,9 @@
                 supabaseClient.from('lunch_records').select('count', { count: 'exact', head: true })
                     .then(function(res) {
                         if (res.error) {
-                            showStatus('⚠️ 表访问异常: ' + res.error.message, true);
+                            showStatus('⚠️ 表异常: ' + res.error.message + '，请确认已创建表', true);
+                        } else {
+                            showStatus('✅ 云端连接成功', false);
                         }
                     });
 
@@ -964,7 +1112,7 @@
             }
         }
 
-        // 启动
+        // ============ 启动 ============
         if (typeof window.supabase !== 'undefined') {
             initApp();
         } else {
