@@ -401,6 +401,38 @@
             }
         }
 
+        .re-draw-btn {
+            margin-top: 12px;
+            padding: 10px 24px;
+            background: #d45a38;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 15px;
+            cursor: pointer;
+            transition: 0.2s;
+            font-family: inherit;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .re-draw-btn:hover {
+            background: #b84428;
+            transform: scale(1.02);
+        }
+        .re-draw-btn:active {
+            transform: scale(0.95);
+        }
+        .re-draw-btn.hidden {
+            display: none;
+        }
+        .re-draw-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
         .history-section {
             background: #1a1a1a;
             border-radius: 20px;
@@ -575,7 +607,6 @@
             }
         }
 
-        /* 加载状态 */
         .loading-spinner {
             display: inline-block;
             width: 16px;
@@ -594,15 +625,6 @@
             100% {
                 transform: rotate(360deg);
             }
-        }
-
-        .status-error {
-            color: #b91c1c !important;
-            border-color: #b91c1c !important;
-        }
-        .status-ok {
-            color: #4a8a5a !important;
-            border-color: #4a8a5a !important;
         }
     </style>
 </head>
@@ -650,6 +672,7 @@
             <div class="result-status" id="resultStatus">
                 <span class="loading-spinner"></span> 连接云端...
             </div>
+            <button class="re-draw-btn hidden" id="reDrawBtn">🔄 重新抽选</button>
         </div>
 
         <div class="history-section">
@@ -671,13 +694,10 @@
         // ============================================================
         // 🚨 请替换成你自己的 Supabase 配置！
         // ============================================================
-        var SUPABASE_URL = "https://ejlqgnhimnnaavwylcvi.supabase.co"; // 👈 替换这里
+var SUPABASE_URL = "https://ejlqgnhimnnaavwylcvi.supabase.co"; // 👈 替换这里
         var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVqbHFnbmhpbW5uYWF2d3lsY3ZpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1ODIzODMsImV4cCI6MjA5NzE1ODM4M30.XEdLs2SXAXhmxUeTEcvbglZD-sKZ_gSploT1OFVPGC8"; // 👈 替换这里
         // ============================================================
 
-        // ============================================================
-        // 😂 每日搞笑标语库
-        // ============================================================
         var SLOGANS = [
             "🍖 人生难题，一键解决",
             "🤔 今天吃啥？这是个哲学问题",
@@ -717,7 +737,6 @@
         var todayPicker = null;
         var restaurantList = [];
 
-        // ============ 工具函数 ============
         function getTodayStr() {
             return new Date().toISOString().slice(0, 10);
         }
@@ -753,7 +772,6 @@
             }, 2000);
         }
 
-        // ============ 核心逻辑 ============
         function selectRandomPicker(records) {
             var today = getTodayStr();
             var limitDate = new Date();
@@ -798,7 +816,6 @@
             return available[Math.floor(Math.random() * available.length)];
         }
 
-        // ============ Supabase 操作 ============
         function fetchAllRecords() {
             return supabaseClient.from('lunch_records').select('*').order('date', { ascending: true })
                 .then(function(res) {
@@ -842,8 +859,13 @@
                 });
         }
 
-        function performDraw() {
-            if (isDrawing) return Promise.resolve({ success: false, message: "抽选中..." });
+        // ============================================================
+        // 🔧 修复：performDraw 加锁，防止并发
+        // ============================================================
+        function performDraw(avoidRestaurant) {
+            if (isDrawing) {
+                return Promise.resolve({ success: false, message: "抽选中，请勿重复点击" });
+            }
             isDrawing = true;
 
             return fetchTodayRecord().then(function(existing) {
@@ -855,7 +877,7 @@
 
                 return getTodayPicker().then(function(picker) {
                     return fetchAllRecords().then(function(records) {
-                        var resto = selectRestaurant(records, null);
+                        var resto = selectRestaurant(records, avoidRestaurant || null);
                         return supabaseClient.from('lunch_records').upsert({
                             date: getTodayStr(),
                             picker: picker,
@@ -867,8 +889,12 @@
                                 return { success: false, message: res.error.message };
                             }
                             var isAvoid = AVOID_RESTAURANTS.indexOf(resto) !== -1;
-                            return { success: true, picker: picker, restaurant: resto,
-                                isAvoid: isAvoid };
+                            return {
+                                success: true,
+                                picker: picker,
+                                restaurant: resto,
+                                isAvoid: isAvoid
+                            };
                         });
                     });
                 });
@@ -879,36 +905,72 @@
             });
         }
 
+        // ============================================================
+        // 🔧 修复：重新抽选 - 直接内联执行，避免锁竞争
+        // ============================================================
         function performReDraw() {
+            if (isDrawing) {
+                return Promise.resolve({ success: false, message: "抽选中，请稍后再试" });
+            }
+
             return fetchTodayRecord().then(function(existing) {
                 if (!existing || !existing.restaurant) {
-                    return { success: false, message: "今日尚无记录" };
+                    return { success: false, message: "今日尚无记录，请先抽选" };
                 }
                 if (AVOID_RESTAURANTS.indexOf(existing.restaurant) === -1) {
-                    return { success: false, message: "「" + existing.restaurant + "」不需要重抽" };
+                    return { success: false, message: "「" + existing.restaurant + "」不需要重新抽选" };
                 }
+
+                var avoid = existing.restaurant;
                 isDrawing = true;
-                return deleteTodayRecord().then(function() {
+
+                return deleteTodayRecord().then(function(deleted) {
+                    if (!deleted) {
+                        isDrawing = false;
+                        return { success: false, message: "删除记录失败" };
+                    }
+
+                    // 直接在这里完成抽选，不调用 performDraw（避免锁竞争）
                     return getTodayPicker().then(function(picker) {
-                        return supabaseClient.from('lunch_records').insert({ date: getTodayStr(),
-                                picker: picker, restaurant: null })
-                            .then(function() { return performDraw(); });
+                        return fetchAllRecords().then(function(records) {
+                            var resto = selectRestaurant(records, avoid);
+                            return supabaseClient.from('lunch_records').upsert({
+                                date: getTodayStr(),
+                                picker: picker,
+                                restaurant: resto
+                            }, { onConflict: 'date' }).then(function(res) {
+                                isDrawing = false;
+                                if (res.error) {
+                                    showStatus("❌ 抽选失败: " + res.error.message, true);
+                                    return { success: false, message: res.error
+                                        .message };
+                                }
+                                var isAvoid = AVOID_RESTAURANTS.indexOf(resto) !== -1;
+                                return {
+                                    success: true,
+                                    picker: picker,
+                                    restaurant: resto,
+                                    isAvoid: isAvoid
+                                };
+                            });
+                        });
                     });
                 });
+            }).catch(function(err) {
+                isDrawing = false;
+                showStatus("❌ 重新抽选异常: " + err.message, true);
+                return { success: false, message: err.message };
             });
         }
 
         function deleteRestaurant(name) {
-            // 检查今天是否已使用
             fetchTodayRecord().then(function(record) {
                 if (record && record.restaurant === name) {
                     showToast('⚠️ 今天已经抽到「' + name + '」，不能删除');
                     return;
                 }
-
                 var index = restaurantList.indexOf(name);
                 if (index === -1) return;
-
                 if (!confirm('确定要删除「' + name + '」吗？')) return;
 
                 restaurantList.splice(index, 1);
@@ -918,11 +980,9 @@
             });
         }
 
-        // ============ 渲染 UI ============
         function renderUI() {
             document.getElementById("slogan").textContent = getDailySlogan();
 
-            // 加载餐厅列表
             var saved = localStorage.getItem('lunch_restaurants');
             if (saved) {
                 try { restaurantList = JSON.parse(saved); } catch (e) { restaurantList = DEFAULT_RESTAURANTS
@@ -966,16 +1026,23 @@
                     });
                 });
 
+                var reDrawBtn = document.getElementById('reDrawBtn');
                 if (record && record.restaurant) {
                     document.getElementById("resultPicker").textContent = record.picker;
                     document.getElementById("resultRestaurant").textContent = record.restaurant;
-                    document.getElementById("resultStatus").innerHTML = '✅ 今日已定！天选之人已出手 🎯';
-                    document.getElementById("resultStatus").style.color = '#4a8a5a';
 
-                    if (AVOID_RESTAURANTS.indexOf(record.restaurant) !== -1) {
+                    var isAvoid = AVOID_RESTAURANTS.indexOf(record.restaurant) !== -1;
+                    if (isAvoid) {
                         document.getElementById("resultStatus").innerHTML = '⚠️ 抽到了「' + record.restaurant +
                             '」可重新抽选 🔄';
                         document.getElementById("resultStatus").style.color = '#d45a38';
+                        reDrawBtn.classList.remove('hidden');
+                        reDrawBtn.disabled = false;
+                    } else {
+                        document.getElementById("resultStatus").innerHTML = '✅ 今日已定！天选之人已出手 🎯';
+                        document.getElementById("resultStatus").style.color = '#4a8a5a';
+                        reDrawBtn.classList.add('hidden');
+                        reDrawBtn.disabled = false;
                     }
                 } else {
                     document.getElementById("resultPicker").textContent = todayPicker || '—';
@@ -983,6 +1050,8 @@
                     document.getElementById("resultStatus").innerHTML =
                         '⏳ <span class="blink">正在纠结中</span> ... 其他人请安静 🤫';
                     document.getElementById("resultStatus").style.color = '#6a5a4a';
+                    reDrawBtn.classList.add('hidden');
+                    reDrawBtn.disabled = false;
                 }
             });
 
@@ -1008,14 +1077,13 @@
             });
         }
 
-        // ============ 事件绑定 ============
         function bindEvents() {
             document.getElementById("fateBtn").addEventListener("click", function() {
                 var btn = this;
                 btn.disabled = true;
                 btn.innerHTML = '⏳ 命运转动中...';
 
-                performDraw().then(function(result) {
+                performDraw(null).then(function(result) {
                     btn.disabled = false;
                     btn.innerHTML =
                         '🔮 决定命运<span class="sub-text"><span class="emoji">🤯</span> 点击后不能反悔 <span class="emoji">😈</span></span>';
@@ -1029,13 +1097,36 @@
                     if (result.success) {
                         renderUI();
                         if (result.isAvoid) {
-                            alert('⚠️ 抽到了「' + result.restaurant + '」\n\n点击「决定命运」重新抽选！');
+                            alert('⚠️ 抽到了「' + result.restaurant + '」\n\n点击「重新抽选」再抽一次！');
                         } else {
                             alert('🍢 天命已定！\n天选之人：' + result.picker + '\n干饭地点：' + result
                                 .restaurant);
                         }
                     } else {
                         alert('❌ 抽选失败: ' + (result.message || "未知错误"));
+                    }
+                });
+            });
+
+            document.getElementById("reDrawBtn").addEventListener("click", function() {
+                var btn = this;
+                btn.disabled = true;
+                btn.textContent = '⏳ 重抽中...';
+
+                performReDraw().then(function(result) {
+                    btn.disabled = false;
+                    btn.innerHTML = '🔄 重新抽选';
+
+                    if (result.success) {
+                        renderUI();
+                        if (result.isAvoid) {
+                            alert('⚠️ 又抽到了「' + result.restaurant + '」\n\n继续点击「重新抽选」！');
+                        } else {
+                            alert('🍢 重新抽选成功！\n天选之人：' + result.picker + '\n干饭地点：' + result
+                                .restaurant);
+                        }
+                    } else {
+                        alert('❌ 重新抽选失败: ' + (result.message || "未知错误"));
                     }
                 });
             });
@@ -1077,7 +1168,6 @@
             return channel;
         }
 
-        // ============ 初始化 ============
         function initApp() {
             if (isInitialized) return;
             if (typeof window.supabase === 'undefined') {
@@ -1092,7 +1182,6 @@
             try {
                 supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-                // 测试连接
                 supabaseClient.from('lunch_records').select('count', { count: 'exact', head: true })
                     .then(function(res) {
                         if (res.error) {
@@ -1112,7 +1201,6 @@
             }
         }
 
-        // ============ 启动 ============
         if (typeof window.supabase !== 'undefined') {
             initApp();
         } else {
